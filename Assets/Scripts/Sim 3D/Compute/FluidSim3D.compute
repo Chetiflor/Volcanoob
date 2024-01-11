@@ -14,10 +14,12 @@ static const int NumThreads = 64;
 // Buffers
 RWStructuredBuffer<float3> Positions;
 RWStructuredBuffer<float3> PredictedPositions;
+RWStructuredBuffer<float3> Accelerations;
 RWStructuredBuffer<float3> Velocities;
 RWStructuredBuffer<float2> Densities; // Density, Near Density
 RWStructuredBuffer<uint3> SpatialIndices; // used for spatial hashing
 RWStructuredBuffer<uint> SpatialOffsets; // used for spatial hashing
+RWStructuredBuffer<float> Viscosities; 
 
 // Settings
 const uint numParticles;
@@ -90,10 +92,10 @@ void ExternalForces (uint3 id : SV_DispatchThreadID)
 	if (id.x >= numParticles) return;
 
 	// External forces (gravity)
-	Velocities[id.x] += float3(0, gravity, 0) * deltaTime;
+	Accelerations[id.x] += float3(0, gravity, 0);
 
 	// Predict
-	PredictedPositions[id.x] = Positions[id.x] + Velocities[id.x] * 1 / 120.0;
+	PredictedPositions[id.x] = Positions[id.x] + (Velocities[id.x] + float3(0, gravity, 0) * deltaTime) * 1 / 120.0;
 }
 
 [numthreads(NumThreads,1,1)]
@@ -215,9 +217,7 @@ void CalculatePressureForce (uint3 id : SV_DispatchThreadID)
 			pressureForce += dir * NearDensityDerivative(dst, smoothingRadius) * sharedNearPressure / nearDensityNeighbour;
 		}
 	}
-
-	float3 acceleration = pressureForce / density;
-	Velocities[id.x] += acceleration * deltaTime;
+	Accelerations[id.x] += pressureForce/density;
 }
 
 
@@ -230,7 +230,6 @@ void CalculateViscosity (uint3 id : SV_DispatchThreadID)
 	int3 originCell = GetCell3D(pos, smoothingRadius);
 	float sqrRadius = smoothingRadius * smoothingRadius;
 
-	float3 viscosityForce = 0;
 	float3 velocity = Velocities[id.x];
 
 	// Neighbour search
@@ -263,17 +262,108 @@ void CalculateViscosity (uint3 id : SV_DispatchThreadID)
 			// Calculate viscosity
 			float dst = sqrt(sqrDstToNeighbour);
 			float3 neighbourVelocity = Velocities[neighbourIndex];
-			viscosityForce += (neighbourVelocity - velocity) * SmoothingKernelPoly6(dst, smoothingRadius);
+			float3 deltaVelocities = neighbourVelocity - velocity;
+
+			float3 viscosityForce = ( deltaVelocities - dot(deltaVelocities, offsetToNeighbour) * offsetToNeighbour / sqrDstToNeighbour) / dst * SmoothingKernelPoly6(dst, smoothingRadius) * Viscosities[id.x];
+			Accelerations[id.x] += viscosityForce / Densities[neighbour][0] ;
+			Accelerations[neighbourIndex] -= viscosityForce/ Densities[neighbourIndex][0];
+			// Accelerations[id.x]-= (neighbourVelocity - velocity) * Viscosities[id.x] / Densities[id.x][0] * SmoothingKernelPoly6(dst, smoothingRadius);
 		}
 	}
-	Velocities[id.x] += viscosityForce * viscosityStrength * deltaTime;
 }
 
 [numthreads(NumThreads, 1, 1)]
 void UpdatePositions(uint3 id : SV_DispatchThreadID)
 {
 	if (id.x >= numParticles) return;
-
+	Velocities[id.x]*=0.99;
+	Velocities[id.x] += Accelerations[id.x] * deltaTime;
 	Positions[id.x] += Velocities[id.x] * deltaTime;
+	Accelerations[id.x]=float3(0,0,0);
 	ResolveCollisions(id.x);
 }
+
+[numthreads(NumThreads,1,1)]
+void CalculateVariableViscosity (uint3 id : SV_DispatchThreadID)
+{
+	if (id.x >= numParticles) return;
+		
+	float3 pos = PredictedPositions[id.x];
+	int3 originCell = GetCell3D(pos, smoothingRadius);
+	float sqrRadius = smoothingRadius * smoothingRadius;
+
+	float3 viscosityForce = 0;
+	float3 velocity = Velocities[id.x];
+
+	float3 adjacentVelocities[27] ;
+
+	// Neighbour search
+	for (int i = 0; i < 27; i ++)
+	{
+		int3 currOffset = offsets3D[i];
+		for (int j = 0; j < 27; j ++)
+		{	
+			uint hash = HashCell3D(originCell + currOffset + offsets3D[j]);
+			uint key = KeyFromHash(hash, numParticles);
+			uint currIndex = SpatialOffsets[key];
+			while (currIndex < numParticles)
+			{
+				uint3 indexData = SpatialIndices[currIndex];
+				currIndex ++;
+				// Exit if no longer looking at correct bin
+				if (indexData[2] != key) break;
+				// Skip if hash does not match
+				if (indexData[1] != hash) continue;
+
+				uint neighbourIndex = indexData[0];
+
+				float3 neighbourPos = PredictedPositions[neighbourIndex];
+				float3 offsetToNeighbour = neighbourPos - (pos + currOffset);
+				float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
+
+				// Skip if not within radius
+				if (sqrDstToNeighbour > sqrRadius) continue;
+
+				// Calculate viscosity
+				float dst = sqrt(sqrDstToNeighbour);
+				float3 neighbourVelocity = Velocities[neighbourIndex];
+				float neighbourDensity = Densities[neighbourIndex][0];
+				adjacentVelocities[i] += neighbourVelocity / neighbourDensity * SmoothingKernelPoly6(dst, smoothingRadius);
+			}
+		}
+
+
+
+		// uint hash = HashCell3D(originCell + currOffset);
+		// uint key = KeyFromHash(hash, numParticles);
+		// uint currIndex = SpatialOffsets[key];
+
+		// while (currIndex < numParticles)
+		// {
+		// 	uint3 indexData = SpatialIndices[currIndex];
+		// 	currIndex ++;
+		// 	// Exit if no longer looking at correct bin
+		// 	if (indexData[2] != key) break;
+		// 	// Skip if hash does not match
+		// 	if (indexData[1] != hash) continue;
+
+		// 	uint neighbourIndex = indexData[0];
+		// 	// Skip if looking at self
+		// 	if (neighbourIndex == id.x) continue;
+
+		// 	float3 neighbourPos = PredictedPositions[neighbourIndex];
+		// 	float3 offsetToNeighbour = neighbourPos - pos;
+		// 	float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
+
+		// 	// Skip if not within radius
+		// 	if (sqrDstToNeighbour > sqrRadius) continue;
+
+		// 	// Calculate viscosity
+		// 	float dst = sqrt(sqrDstToNeighbour);
+		// 	float3 neighbourVelocity = Velocities[neighbourIndex];
+		// 	viscosityForce += (neighbourVelocity - velocity) * SmoothingKernelPoly6(dst, smoothingRadius);
+		// }
+	}
+	Velocities[id.x] += viscosityForce * viscosityStrength * deltaTime;
+}
+

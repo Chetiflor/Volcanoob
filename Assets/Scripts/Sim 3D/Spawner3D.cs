@@ -18,6 +18,8 @@ public class Spawner3D : MonoBehaviour
         int numPoints = numParticlesPerAxis * numParticlesPerAxis * numParticlesPerAxis;
         float3[] points = new float3[numPoints];
         float3[] velocities = new float3[numPoints];
+        float[] viscosities = new float[numPoints];
+        float[] temperatures = new float[numPoints];
 
         int i = 0;
 
@@ -37,18 +39,22 @@ public class Spawner3D : MonoBehaviour
                     float3 jitter = UnityEngine.Random.insideUnitSphere * jitterStrength;
                     points[i] = new float3(px, py, pz) + jitter;
                     velocities[i] = initialVel;
+                    viscosities[i] = tz*1;
+                    temperatures[i] = 0;
                     i++;
                 }
             }
         }
 
-        return new SpawnData() { points = points, velocities = velocities };
+        return new SpawnData() { points = points, velocities = velocities, temperatures = temperatures, viscosities = viscosities };
     }
 
     public struct SpawnData
     {
         public float3[] points;
         public float3[] velocities;
+        public float[] temperatures;
+        public float[] viscosities;
     }
 
     void OnValidate()

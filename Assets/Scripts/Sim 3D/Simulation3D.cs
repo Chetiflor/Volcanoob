@@ -16,6 +16,8 @@ public class Simulation3D : MonoBehaviour
     public float pressureMultiplier;
     public float nearPressureMultiplier;
     public float viscosityStrength;
+    public Vector3 thermostatPosition;
+    public float thermostatTemperature;
 
     [Header("References")]
     public ComputeShader compute;
@@ -25,8 +27,11 @@ public class Simulation3D : MonoBehaviour
 
     // Buffers
     public ComputeBuffer positionBuffer { get; private set; }
+    public ComputeBuffer accelerationBuffer { get; private set; }
     public ComputeBuffer velocityBuffer { get; private set; }
     public ComputeBuffer densityBuffer { get; private set; }
+    public ComputeBuffer viscosityBuffer { get; private set; }
+    public ComputeBuffer temperatureBuffer { get; private set; }
     public ComputeBuffer predictedPositionsBuffer;
     ComputeBuffer spatialIndices;
     ComputeBuffer spatialOffsets;
@@ -38,6 +43,7 @@ public class Simulation3D : MonoBehaviour
     const int pressureKernel = 3;
     const int viscosityKernel = 4;
     const int updatePositionsKernel = 5;
+    const int variableViscosityKrenel = 6;
 
     GPUSort gpuSort;
 
@@ -59,8 +65,11 @@ public class Simulation3D : MonoBehaviour
         // Create buffers
         int numParticles = spawnData.points.Length;
         positionBuffer = ComputeHelper.CreateStructuredBuffer<float3>(numParticles);
+        accelerationBuffer = ComputeHelper.CreateStructuredBuffer<float3>(numParticles);
         predictedPositionsBuffer = ComputeHelper.CreateStructuredBuffer<float3>(numParticles);
         velocityBuffer = ComputeHelper.CreateStructuredBuffer<float3>(numParticles);
+        temperatureBuffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles);
+        viscosityBuffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles);
         densityBuffer = ComputeHelper.CreateStructuredBuffer<float2>(numParticles);
         spatialIndices = ComputeHelper.CreateStructuredBuffer<uint3>(numParticles);
         spatialOffsets = ComputeHelper.CreateStructuredBuffer<uint>(numParticles);
@@ -73,8 +82,10 @@ public class Simulation3D : MonoBehaviour
         ComputeHelper.SetBuffer(compute, predictedPositionsBuffer, "PredictedPositions", externalForcesKernel, spatialHashKernel, densityKernel, pressureKernel, viscosityKernel, updatePositionsKernel);
         ComputeHelper.SetBuffer(compute, spatialIndices, "SpatialIndices", spatialHashKernel, densityKernel, pressureKernel, viscosityKernel);
         ComputeHelper.SetBuffer(compute, spatialOffsets, "SpatialOffsets", spatialHashKernel, densityKernel, pressureKernel, viscosityKernel);
-        ComputeHelper.SetBuffer(compute, densityBuffer, "Densities", densityKernel, pressureKernel, viscosityKernel);
+        ComputeHelper.SetBuffer(compute, densityBuffer, "Densities", externalForcesKernel, densityKernel, pressureKernel, viscosityKernel, updatePositionsKernel);
         ComputeHelper.SetBuffer(compute, velocityBuffer, "Velocities", externalForcesKernel, pressureKernel, viscosityKernel, updatePositionsKernel);
+        ComputeHelper.SetBuffer(compute, viscosityBuffer, "Viscosities", viscosityKernel);
+        ComputeHelper.SetBuffer(compute, accelerationBuffer, "Accelerations", externalForcesKernel, updatePositionsKernel, pressureKernel, viscosityKernel);
 
         compute.SetInt("numParticles", positionBuffer.count);
 
@@ -170,6 +181,8 @@ public class Simulation3D : MonoBehaviour
         positionBuffer.SetData(allPoints);
         predictedPositionsBuffer.SetData(allPoints);
         velocityBuffer.SetData(spawnData.velocities);
+        temperatureBuffer.SetData(spawnData.temperatures);
+        viscosityBuffer.SetData(spawnData.viscosities);
     }
 
     void HandleInput()
@@ -194,7 +207,7 @@ public class Simulation3D : MonoBehaviour
 
     void OnDestroy()
     {
-        ComputeHelper.Release(positionBuffer, predictedPositionsBuffer, velocityBuffer, densityBuffer, spatialIndices, spatialOffsets);
+        ComputeHelper.Release(positionBuffer, predictedPositionsBuffer, velocityBuffer, densityBuffer, viscosityBuffer, accelerationBuffer, temperatureBuffer, spatialIndices, spatialOffsets); 
     }
 
     void OnDrawGizmos()
