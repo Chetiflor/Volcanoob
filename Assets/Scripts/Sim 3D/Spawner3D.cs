@@ -20,6 +20,7 @@ public class Spawner3D : MonoBehaviour
         float3[] velocities = new float3[numPoints];
         float[] viscosities = new float[numPoints];
         float[] temperatures = new float[numPoints];
+        float3[] zeros = new float3[numPoints];
 
         int i = 0;
 
@@ -41,12 +42,13 @@ public class Spawner3D : MonoBehaviour
                     velocities[i] = initialVel;
                     viscosities[i] = tz*1;
                     temperatures[i] = 0;
+                    zeros[i] = new float3(0,0,0);
                     i++;
                 }
             }
         }
 
-        return new SpawnData() { points = points, velocities = velocities, temperatures = temperatures, viscosities = viscosities };
+        return new SpawnData() { points = points, velocities = velocities, temperatures = temperatures, viscosities = viscosities, zeros=zeros };
     }
 
     public struct SpawnData
@@ -55,6 +57,7 @@ public class Spawner3D : MonoBehaviour
         public float3[] velocities;
         public float[] temperatures;
         public float[] viscosities;
+        public float3[] zeros;
     }
 
     void OnValidate()

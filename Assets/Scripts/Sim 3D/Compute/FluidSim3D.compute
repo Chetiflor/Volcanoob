@@ -1,3 +1,4 @@
+#pragma kernel PredictPositions
 #pragma kernel ExternalForces
 #pragma kernel UpdateSpatialHash
 #pragma kernel CalculateDensities
@@ -15,7 +16,12 @@ static const int NumThreads = 64;
 RWStructuredBuffer<float3> Positions;
 RWStructuredBuffer<float3> PredictedPositions;
 RWStructuredBuffer<float3> Accelerations;
+RWStructuredBuffer<float3> k1;
+RWStructuredBuffer<float3> k2;
+RWStructuredBuffer<float3> k3;
+RWStructuredBuffer<float3> k4;
 RWStructuredBuffer<float3> Velocities;
+RWStructuredBuffer<float3> PredictedVelocities;
 RWStructuredBuffer<float2> Densities; // Density, Near Density
 RWStructuredBuffer<uint3> SpatialIndices; // used for spatial hashing
 RWStructuredBuffer<uint> SpatialOffsets; // used for spatial hashing
@@ -87,6 +93,16 @@ void ResolveCollisions(uint particleIndex)
 }
 
 [numthreads(NumThreads,1,1)]
+void PredictPositions (uint3 id : SV_DispatchThreadID)
+{
+	if (id.x >= numParticles) return;
+
+	// Predict
+	PredictedVelocities[id.x] = Velocities[id.x] + Accelerations[id.x] * deltaTime;
+	PredictedPositions[id.x] = Positions[id.x] + PredictedVelocities[id.x] * deltaTime;
+}
+
+[numthreads(NumThreads,1,1)]
 void ExternalForces (uint3 id : SV_DispatchThreadID)
 {
 	if (id.x >= numParticles) return;
@@ -94,8 +110,6 @@ void ExternalForces (uint3 id : SV_DispatchThreadID)
 	// External forces (gravity)
 	Accelerations[id.x] += float3(0, gravity, 0);
 
-	// Predict
-	PredictedPositions[id.x] = Positions[id.x] + (Velocities[id.x] + float3(0, gravity, 0) * deltaTime) * 1 / 120.0;
 }
 
 [numthreads(NumThreads,1,1)]
@@ -230,7 +244,7 @@ void CalculateViscosity (uint3 id : SV_DispatchThreadID)
 	int3 originCell = GetCell3D(pos, smoothingRadius);
 	float sqrRadius = smoothingRadius * smoothingRadius;
 
-	float3 velocity = Velocities[id.x];
+	float3 velocity = PredictedVelocities[id.x];
 
 	// Neighbour search
 	for (int i = 0; i < 27; i ++)
@@ -254,20 +268,20 @@ void CalculateViscosity (uint3 id : SV_DispatchThreadID)
 
 			float3 neighbourPos = PredictedPositions[neighbourIndex];
 			float3 offsetToNeighbour = neighbourPos - pos;
-			float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
+			float sqrDstToNeighbour = max(0.01, dot(offsetToNeighbour, offsetToNeighbour));
 
 			// Skip if not within radius
 			if (sqrDstToNeighbour > sqrRadius) continue;
 
 			// Calculate viscosity
 			float dst = sqrt(sqrDstToNeighbour);
-			float3 neighbourVelocity = Velocities[neighbourIndex];
-			float3 deltaVelocities = neighbourVelocity - velocity;
+			float3 neighbourVelocity = PredictedVelocities[neighbourIndex];
+			float3 deltaPredictedVelocities = neighbourVelocity - velocity;
 
-			float3 viscosityForce = ( deltaVelocities - dot(deltaVelocities, offsetToNeighbour) * offsetToNeighbour / sqrDstToNeighbour) / dst * SmoothingKernelPoly6(dst, smoothingRadius) * Viscosities[id.x];
-			Accelerations[id.x] += viscosityForce / Densities[neighbour][0] ;
-			Accelerations[neighbourIndex] -= viscosityForce/ Densities[neighbourIndex][0];
-			// Accelerations[id.x]-= (neighbourVelocity - velocity) * Viscosities[id.x] / Densities[id.x][0] * SmoothingKernelPoly6(dst, smoothingRadius);
+			float3 viscosityForce = ( deltaPredictedVelocities - dot(deltaPredictedVelocities, offsetToNeighbour) * offsetToNeighbour / sqrDstToNeighbour) / dst * SmoothingKernelPoly6(dst, smoothingRadius) * Viscosities[id.x];
+			// Accelerations[id.x] += viscosityForce / Densities[neighbourIndex][0] ;
+			// Accelerations[neighbourIndex] -= viscosityForce/ Densities[neighbourIndex][0];
+			//Accelerations[id.x]+= (neighbourVelocity - velocity) * Viscosities[id.x] / Densities[id.x][0] * SmoothingKernelPoly6(dst, smoothingRadius);
 		}
 	}
 }
@@ -276,11 +290,18 @@ void CalculateViscosity (uint3 id : SV_DispatchThreadID)
 void UpdatePositions(uint3 id : SV_DispatchThreadID)
 {
 	if (id.x >= numParticles) return;
-	Velocities[id.x]*=0.99;
-	Velocities[id.x] += Accelerations[id.x] * deltaTime;
+	float3 acc=(k1[id.x] + 2*k2[id.x] + 2*k3[id.x] + k4[id.x]);
+
+	Velocities[id.x] += acc * deltaTime / 6;
+	// Velocities[id.x] += float3(0,gravity,0)* deltaTime;
 	Positions[id.x] += Velocities[id.x] * deltaTime;
-	Accelerations[id.x]=float3(0,0,0);
+	k1[id.x]*=0;
+	k2[id.x]*=0;
+	k3[id.x]*=0;
+	k4[id.x]*=0;
 	ResolveCollisions(id.x);
+	PredictedPositions[id.x]=Positions[id.x];
+	PredictedVelocities[id.x]=Velocities[id.x];
 }
 
 [numthreads(NumThreads,1,1)]
@@ -293,9 +314,9 @@ void CalculateVariableViscosity (uint3 id : SV_DispatchThreadID)
 	float sqrRadius = smoothingRadius * smoothingRadius;
 
 	float3 viscosityForce = 0;
-	float3 velocity = Velocities[id.x];
+	float3 velocity = PredictedVelocities[id.x];
 
-	float3 adjacentVelocities[27] ;
+	float3 adjacentPredictedVelocities[27] ;
 
 	// Neighbour search
 	for (int i = 0; i < 27; i ++)
@@ -326,9 +347,9 @@ void CalculateVariableViscosity (uint3 id : SV_DispatchThreadID)
 
 				// Calculate viscosity
 				float dst = sqrt(sqrDstToNeighbour);
-				float3 neighbourVelocity = Velocities[neighbourIndex];
+				float3 neighbourVelocity = PredictedVelocities[neighbourIndex];
 				float neighbourDensity = Densities[neighbourIndex][0];
-				adjacentVelocities[i] += neighbourVelocity / neighbourDensity * SmoothingKernelPoly6(dst, smoothingRadius);
+				adjacentPredictedVelocities[i] += neighbourVelocity / neighbourDensity * SmoothingKernelPoly6(dst, smoothingRadius);
 			}
 		}
 
@@ -360,10 +381,10 @@ void CalculateVariableViscosity (uint3 id : SV_DispatchThreadID)
 
 		// 	// Calculate viscosity
 		// 	float dst = sqrt(sqrDstToNeighbour);
-		// 	float3 neighbourVelocity = Velocities[neighbourIndex];
+		// 	float3 neighbourVelocity = PredictedVelocities[neighbourIndex];
 		// 	viscosityForce += (neighbourVelocity - velocity) * SmoothingKernelPoly6(dst, smoothingRadius);
 		// }
 	}
-	Velocities[id.x] += viscosityForce * viscosityStrength * deltaTime;
+	PredictedVelocities[id.x] += viscosityForce * viscosityStrength * deltaTime;
 }
 

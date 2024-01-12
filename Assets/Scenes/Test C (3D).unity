@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 0.4492334, g: 0.49930477, b: 0.5757145, a: 1}
+  m_IndirectSpecularColor: {r: 0.4492445, g: 0.49931413, b: 0.57571995, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -265,9 +265,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c8b3b79f98be3f34e8fefade4cef2ade, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  timeScale: 0.9
+  timeScale: 0.3
   fixedTimeStep: 0
-  iterationsPerFrame: 3
+  iterationsPerFrame: 9
   gravity: -10
   collisionDamping: 0.95
   smoothingRadius: 0.2
@@ -275,6 +275,8 @@ MonoBehaviour:
   pressureMultiplier: 288
   nearPressureMultiplier: 2.25
   viscosityStrength: 0.001
+  thermostatPosition: {x: 0, y: 0, z: 0}
+  thermostatTemperature: 0
   compute: {fileID: 7200000, guid: 9443696acfd0ebe4fb503b56d952256c, type: 3}
   spawner: {fileID: 271053323}
   display: {fileID: 271053320}
@@ -291,7 +293,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: bdfe3008efbf29745879ab1d40574478, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  shader: {fileID: 4800000, guid: 638bb1bdb9b8e374e8a5cbcd595e3973, type: 3}
+  shader: {fileID: 4800000, guid: 06957cb773d9ca1c08b3d5496b8d7179, type: 3}
   scale: 0.05
   col: {r: 0.27803493, g: 0.49487686, b: 0.8301887, a: 1}
   colourMap:
