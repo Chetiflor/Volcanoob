@@ -20,6 +20,7 @@ public class Spawner3D : MonoBehaviour
         float3[] velocities = new float3[numPoints];
         float[] viscosities = new float[numPoints];
         float[] temperatures = new float[numPoints];
+        float[] thermicConductivities = new float[numPoints];
         float3[] zeros = new float3[numPoints];
 
         int i = 0;
@@ -40,15 +41,16 @@ public class Spawner3D : MonoBehaviour
                     float3 jitter = UnityEngine.Random.insideUnitSphere * jitterStrength;
                     points[i] = new float3(px, py, pz) + jitter;
                     velocities[i] = initialVel;
-                    viscosities[i] = tz;
-                    temperatures[i] = 0;
+                    viscosities[i] = tz*tz*0;
+                    temperatures[i] = 1273*ty;
+                    thermicConductivities[i] = 100.9f;
                     zeros[i] = new float3(0,0,0);
                     i++;
                 }
             }
         }
 
-        return new SpawnData() { points = points, velocities = velocities, temperatures = temperatures, viscosities = viscosities, zeros=zeros };
+        return new SpawnData() { points = points, velocities = velocities, temperatures = temperatures, viscosities = viscosities, zeros=zeros, thermicConductivities=thermicConductivities };
     }
 
     public struct SpawnData
@@ -56,6 +58,7 @@ public class Spawner3D : MonoBehaviour
         public float3[] points;
         public float3[] velocities;
         public float[] temperatures;
+        public float[] thermicConductivities;
         public float[] viscosities;
         public float3[] zeros;
     }

@@ -1,11 +1,13 @@
-#pragma kernel PredictPositions
+#pragma kernel PredictPosition
 #pragma kernel ExternalForces
 #pragma kernel UpdateSpatialHash
-#pragma kernel CalculateDensities
+#pragma kernel CalculateDensity
 #pragma kernel CalculatePressureForce
 #pragma kernel CalculateViscosity
-#pragma kernel UpdatePositions
+#pragma kernel UpdatePosition
 #pragma kernel CalculateVariableViscosity
+#pragma kernel CalculateDeltaTemperature
+#pragma kernel UpdateTemperature
 
 // Includes
 #include "./FluidMaths3D.hlsl"
@@ -27,6 +29,9 @@ RWStructuredBuffer<float2> Densities; // Density, Near Density
 RWStructuredBuffer<uint3> SpatialIndices; // used for spatial hashing
 RWStructuredBuffer<uint> SpatialOffsets; // used for spatial hashing
 RWStructuredBuffer<float> Viscosities; 
+RWStructuredBuffer<float> Temperatures; 
+RWStructuredBuffer<float> DeltaTemperatures; 
+RWStructuredBuffer<float> ThermicConductivities; 
 
 // Settings
 const uint numParticles;
@@ -42,6 +47,9 @@ const float edgeForce;
 const float edgeForceDst;
 const float3 boundsSize;
 const float3 centre;
+const float3 thermostatPosition;
+const float thermostatTemperature;
+const float thermostatDensity;
 
 const float4x4 localToWorld;
 const float4x4 worldToLocal;
@@ -94,7 +102,7 @@ void ResolveCollisions(uint particleIndex)
 }
 
 [numthreads(NumThreads,1,1)]
-void PredictPositions (uint3 id : SV_DispatchThreadID)
+void PredictPosition (uint3 id : SV_DispatchThreadID)
 {
 	if (id.x >= numParticles) return;
 
@@ -129,7 +137,7 @@ void UpdateSpatialHash (uint3 id : SV_DispatchThreadID)
 }
 
 [numthreads(NumThreads,1,1)]
-void CalculateDensities (uint3 id : SV_DispatchThreadID)
+void CalculateDensity (uint3 id : SV_DispatchThreadID)
 {
 	if (id.x >= numParticles) return;
 
@@ -288,7 +296,7 @@ void CalculateViscosity (uint3 id : SV_DispatchThreadID)
 }
 
 [numthreads(NumThreads, 1, 1)]
-void UpdatePositions(uint3 id : SV_DispatchThreadID)
+void UpdatePosition(uint3 id : SV_DispatchThreadID)
 {
 	if (id.x >= numParticles) return;
 	float3 acc=(k1[id.x] + 2*k2[id.x] + 2*k3[id.x] + k4[id.x]);
@@ -365,3 +373,81 @@ void CalculateVariableViscosity (uint3 id : SV_DispatchThreadID)
 	Accelerations[id.x] += laplacian * Viscosities[id.x];
 }
 
+[numthreads(NumThreads,1,1)]
+void CalculateDeltaTemperature (uint3 id : SV_DispatchThreadID)
+{
+	if (id.x >= numParticles) return;
+		
+	float3 pos = PredictedPositions[id.x];
+	int3 originCell = GetCell3D(pos, smoothingRadius);
+	float sqrRadius = smoothingRadius * smoothingRadius;
+	float radius = sqrt(sqrRadius);
+
+	float3 temperature = Temperatures[id.x];
+
+
+	// Compute speed laplacian
+	float laplacian = 0;
+	for (int dim = 0; dim < 3; dim ++)
+	{
+		for(int i = 0; i<2;i++)
+		{
+
+		
+			int3 currOffset = (0,0,0);
+			currOffset[dim]=2*i-1;
+			float deltaTemperature = 0;
+			for (int j = 0; j < 27; j ++)
+			{	
+				uint hash = HashCell3D(originCell + currOffset + offsets3D[j]);
+				uint key = KeyFromHash(hash, numParticles);
+				uint currIndex = SpatialOffsets[key];
+				while (currIndex < numParticles)
+				{
+					uint3 indexData = SpatialIndices[currIndex];
+					currIndex ++;
+					// Exit if no longer looking at correct bin
+					if (indexData[2] != key) break;
+					// Skip if hash does not match
+					if (indexData[1] != hash) continue;
+
+					uint neighbourIndex = indexData[0];
+
+					float3 neighbourPos = PredictedPositions[neighbourIndex];
+					float3 offsetToNeighbour = neighbourPos - (pos + currOffset);
+					float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
+
+					// Skip if not within radius
+					if (sqrDstToNeighbour > sqrRadius) continue;
+
+					// Calculate T(x+delta_x)
+					float dst = sqrt(sqrDstToNeighbour);
+					float neighbourTemperature = Temperatures[neighbourIndex];
+					float neighbourDensity = Densities[neighbourIndex][0];
+					deltaTemperature += (neighbourTemperature-temperature) / neighbourDensity * SmoothingKernelPoly6(dst, smoothingRadius);
+				}
+			}
+			laplacian += deltaTemperature/radius;
+		}
+
+	}
+
+	float3 offsetToThermostat = thermostatPosition - pos;
+	float sqrDstToThermostat = dot(offsetToThermostat, offsetToThermostat);
+	if (sqrDstToThermostat <= sqrRadius)
+	{
+		float dst= sqrt(sqrDstToThermostat);
+		laplacian += (thermostatTemperature - temperature) / thermostatDensity * SmoothingKernelPoly6(dst, smoothingRadius) / dst;
+
+	}
+
+	DeltaTemperatures[id.x] = laplacian * ThermicConductivities[id.x];
+}
+
+[numthreads(NumThreads, 1, 1)]
+void UpdateTemperature(uint3 id : SV_DispatchThreadID)
+{
+	if (id.x >= numParticles) return;
+	Temperatures[id.x]+=DeltaTemperatures[id.x]*deltaTime;
+	DeltaTemperatures[id.x]=0;
+}
