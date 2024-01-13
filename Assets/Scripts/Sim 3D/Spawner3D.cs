@@ -40,7 +40,7 @@ public class Spawner3D : MonoBehaviour
                     float3 jitter = UnityEngine.Random.insideUnitSphere * jitterStrength;
                     points[i] = new float3(px, py, pz) + jitter;
                     velocities[i] = initialVel;
-                    viscosities[i] = tz*1;
+                    viscosities[i] = tz;
                     temperatures[i] = 0;
                     zeros[i] = new float3(0,0,0);
                     i++;

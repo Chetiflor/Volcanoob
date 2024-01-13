@@ -49,7 +49,7 @@ public class Simulation3D : MonoBehaviour
     const int pressureKernel = 4;
     const int viscosityKernel = 5;
     const int updatePositionsKernel = 6;
-    const int variableViscosityKrenel = 7;
+    const int variableViscosityKernel = 7;
 
     GPUSort gpuSort;
 
@@ -90,14 +90,14 @@ public class Simulation3D : MonoBehaviour
         // Init compute
         ComputeHelper.SetBuffer(compute, positionBuffer, "Positions", predictPositionsKernel, updatePositionsKernel);
         ComputeHelper.SetBuffer(compute, velocityBuffer, "Velocities", predictPositionsKernel,  updatePositionsKernel);
-        ComputeHelper.SetBuffer(compute, predictedPositionBuffer, "PredictedPositions", predictPositionsKernel, spatialHashKernel, densityKernel, pressureKernel, viscosityKernel, updatePositionsKernel);
-        ComputeHelper.SetBuffer(compute, predictedVelocityBuffer, "PredictedVelocities", predictPositionsKernel, externalForcesKernel, pressureKernel, viscosityKernel, updatePositionsKernel);
+        ComputeHelper.SetBuffer(compute, predictedPositionBuffer, "PredictedPositions", predictPositionsKernel, spatialHashKernel, densityKernel, pressureKernel, viscosityKernel, variableViscosityKernel, updatePositionsKernel);
+        ComputeHelper.SetBuffer(compute, predictedVelocityBuffer, "PredictedVelocities", predictPositionsKernel, externalForcesKernel, pressureKernel, viscosityKernel, variableViscosityKernel, updatePositionsKernel);
 
-        ComputeHelper.SetBuffer(compute, spatialIndices, "SpatialIndices", spatialHashKernel, densityKernel, pressureKernel, viscosityKernel);
-        ComputeHelper.SetBuffer(compute, spatialOffsets, "SpatialOffsets", spatialHashKernel, densityKernel, pressureKernel, viscosityKernel);
+        ComputeHelper.SetBuffer(compute, spatialIndices, "SpatialIndices", spatialHashKernel, densityKernel, pressureKernel, viscosityKernel, variableViscosityKernel);
+        ComputeHelper.SetBuffer(compute, spatialOffsets, "SpatialOffsets", spatialHashKernel, densityKernel, pressureKernel, viscosityKernel, variableViscosityKernel);
 
-        ComputeHelper.SetBuffer(compute, densityBuffer, "Densities", externalForcesKernel, densityKernel, pressureKernel, viscosityKernel);
-        ComputeHelper.SetBuffer(compute, viscosityBuffer, "Viscosities", viscosityKernel);
+        ComputeHelper.SetBuffer(compute, densityBuffer, "Densities", externalForcesKernel, densityKernel, pressureKernel, viscosityKernel, variableViscosityKernel);
+        ComputeHelper.SetBuffer(compute, viscosityBuffer, "Viscosities", viscosityKernel, variableViscosityKernel);
 
         ComputeHelper.SetBuffer(compute, k1Buffer, "k1", updatePositionsKernel);
         ComputeHelper.SetBuffer(compute, k2Buffer, "k2", updatePositionsKernel);
@@ -161,41 +161,41 @@ public class Simulation3D : MonoBehaviour
     void RunSimulationStep(float deltaTime)
     {
         compute.SetFloat("deltaTime", deltaTime/2);
-        ComputeHelper.SetBuffer(compute, k1Buffer, "Accelerations", externalForcesKernel, pressureKernel, viscosityKernel,predictPositionsKernel);
+        ComputeHelper.SetBuffer(compute, k1Buffer, "Accelerations", externalForcesKernel, pressureKernel, viscosityKernel, variableViscosityKernel, predictPositionsKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: spatialHashKernel);
         gpuSort.SortAndCalculateOffsets();
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: densityKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: externalForcesKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: pressureKernel);
-        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: viscosityKernel);
+        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: variableViscosityKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: predictPositionsKernel);
 
-        ComputeHelper.SetBuffer(compute, k2Buffer, "Accelerations", externalForcesKernel, pressureKernel, viscosityKernel,predictPositionsKernel);
+        ComputeHelper.SetBuffer(compute, k2Buffer, "Accelerations", externalForcesKernel, pressureKernel, viscosityKernel, variableViscosityKernel, predictPositionsKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: spatialHashKernel);
         gpuSort.SortAndCalculateOffsets();
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: densityKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: externalForcesKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: pressureKernel);
-        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: viscosityKernel);
+        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: variableViscosityKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: predictPositionsKernel);
 
         compute.SetFloat("deltaTime", deltaTime);
-        ComputeHelper.SetBuffer(compute, k3Buffer, "Accelerations", externalForcesKernel, pressureKernel, viscosityKernel,predictPositionsKernel);
+        ComputeHelper.SetBuffer(compute, k3Buffer, "Accelerations", externalForcesKernel, pressureKernel, viscosityKernel, variableViscosityKernel, predictPositionsKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: spatialHashKernel);
         gpuSort.SortAndCalculateOffsets();
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: densityKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: externalForcesKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: pressureKernel);
-        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: viscosityKernel);
+        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: variableViscosityKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: predictPositionsKernel);
         
-        ComputeHelper.SetBuffer(compute, k4Buffer, "Accelerations", externalForcesKernel, pressureKernel, viscosityKernel,predictPositionsKernel);
+        ComputeHelper.SetBuffer(compute, k4Buffer, "Accelerations", externalForcesKernel, pressureKernel, viscosityKernel, variableViscosityKernel, predictPositionsKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: spatialHashKernel);
         gpuSort.SortAndCalculateOffsets();
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: densityKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: externalForcesKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: pressureKernel);
-        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: viscosityKernel);
+        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: variableViscosityKernel);
         ComputeHelper.SetBuffer(compute, k1Buffer, "k1", updatePositionsKernel);
         ComputeHelper.SetBuffer(compute, k2Buffer, "k2", updatePositionsKernel);
         ComputeHelper.SetBuffer(compute, k3Buffer, "k3", updatePositionsKernel);

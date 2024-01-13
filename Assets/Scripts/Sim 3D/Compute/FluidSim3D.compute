@@ -5,6 +5,7 @@
 #pragma kernel CalculatePressureForce
 #pragma kernel CalculateViscosity
 #pragma kernel UpdatePositions
+#pragma kernel CalculateVariableViscosity
 
 // Includes
 #include "./FluidMaths3D.hlsl"
@@ -293,7 +294,6 @@ void UpdatePositions(uint3 id : SV_DispatchThreadID)
 	float3 acc=(k1[id.x] + 2*k2[id.x] + 2*k3[id.x] + k4[id.x]);
 
 	Velocities[id.x] += acc * deltaTime / 6;
-	// Velocities[id.x] += float3(0,gravity,0)* deltaTime;
 	Positions[id.x] += Velocities[id.x] * deltaTime;
 	k1[id.x]*=0;
 	k2[id.x]*=0;
@@ -312,79 +312,56 @@ void CalculateVariableViscosity (uint3 id : SV_DispatchThreadID)
 	float3 pos = PredictedPositions[id.x];
 	int3 originCell = GetCell3D(pos, smoothingRadius);
 	float sqrRadius = smoothingRadius * smoothingRadius;
+	float radius = sqrt(sqrRadius);
 
-	float3 viscosityForce = 0;
 	float3 velocity = PredictedVelocities[id.x];
 
-	float3 adjacentPredictedVelocities[27] ;
 
-	// Neighbour search
-	for (int i = 0; i < 27; i ++)
+	// Compute speed laplacian
+	float3 laplacian = (0,0,0);
+	for (int dim = 0; dim < 3; dim ++)
 	{
-		int3 currOffset = offsets3D[i];
-		for (int j = 0; j < 27; j ++)
-		{	
-			uint hash = HashCell3D(originCell + currOffset + offsets3D[j]);
-			uint key = KeyFromHash(hash, numParticles);
-			uint currIndex = SpatialOffsets[key];
-			while (currIndex < numParticles)
-			{
-				uint3 indexData = SpatialIndices[currIndex];
-				currIndex ++;
-				// Exit if no longer looking at correct bin
-				if (indexData[2] != key) break;
-				// Skip if hash does not match
-				if (indexData[1] != hash) continue;
+		for(int i = 0; i<2;i++)
+		{
 
-				uint neighbourIndex = indexData[0];
+		
+			int3 currOffset = (0,0,0);
+			currOffset[dim]=2*i-1;
+			float3 deltaVelocity = (0,0,0);
+			for (int j = 0; j < 27; j ++)
+			{	
+				uint hash = HashCell3D(originCell + currOffset + offsets3D[j]);
+				uint key = KeyFromHash(hash, numParticles);
+				uint currIndex = SpatialOffsets[key];
+				while (currIndex < numParticles)
+				{
+					uint3 indexData = SpatialIndices[currIndex];
+					currIndex ++;
+					// Exit if no longer looking at correct bin
+					if (indexData[2] != key) break;
+					// Skip if hash does not match
+					if (indexData[1] != hash) continue;
 
-				float3 neighbourPos = PredictedPositions[neighbourIndex];
-				float3 offsetToNeighbour = neighbourPos - (pos + currOffset);
-				float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
+					uint neighbourIndex = indexData[0];
 
-				// Skip if not within radius
-				if (sqrDstToNeighbour > sqrRadius) continue;
+					float3 neighbourPos = PredictedPositions[neighbourIndex];
+					float3 offsetToNeighbour = neighbourPos - (pos + currOffset);
+					float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
 
-				// Calculate viscosity
-				float dst = sqrt(sqrDstToNeighbour);
-				float3 neighbourVelocity = PredictedVelocities[neighbourIndex];
-				float neighbourDensity = Densities[neighbourIndex][0];
-				adjacentPredictedVelocities[i] += neighbourVelocity / neighbourDensity * SmoothingKernelPoly6(dst, smoothingRadius);
+					// Skip if not within radius
+					if (sqrDstToNeighbour > sqrRadius) continue;
+
+					// Calculate viscosity
+					float dst = sqrt(sqrDstToNeighbour);
+					float3 neighbourVelocity = PredictedVelocities[neighbourIndex];
+					float neighbourDensity = Densities[neighbourIndex][0];
+					deltaVelocity += neighbourVelocity / neighbourDensity * SmoothingKernelPoly6(dst, smoothingRadius);
+				}
 			}
+		laplacian += (deltaVelocity-velocity)/radius;
 		}
 
-
-
-		// uint hash = HashCell3D(originCell + currOffset);
-		// uint key = KeyFromHash(hash, numParticles);
-		// uint currIndex = SpatialOffsets[key];
-
-		// while (currIndex < numParticles)
-		// {
-		// 	uint3 indexData = SpatialIndices[currIndex];
-		// 	currIndex ++;
-		// 	// Exit if no longer looking at correct bin
-		// 	if (indexData[2] != key) break;
-		// 	// Skip if hash does not match
-		// 	if (indexData[1] != hash) continue;
-
-		// 	uint neighbourIndex = indexData[0];
-		// 	// Skip if looking at self
-		// 	if (neighbourIndex == id.x) continue;
-
-		// 	float3 neighbourPos = PredictedPositions[neighbourIndex];
-		// 	float3 offsetToNeighbour = neighbourPos - pos;
-		// 	float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
-
-		// 	// Skip if not within radius
-		// 	if (sqrDstToNeighbour > sqrRadius) continue;
-
-		// 	// Calculate viscosity
-		// 	float dst = sqrt(sqrDstToNeighbour);
-		// 	float3 neighbourVelocity = PredictedVelocities[neighbourIndex];
-		// 	viscosityForce += (neighbourVelocity - velocity) * SmoothingKernelPoly6(dst, smoothingRadius);
-		// }
 	}
-	PredictedVelocities[id.x] += viscosityForce * viscosityStrength * deltaTime;
+	Accelerations[id.x] += laplacian * Viscosities[id.x];
 }
 
