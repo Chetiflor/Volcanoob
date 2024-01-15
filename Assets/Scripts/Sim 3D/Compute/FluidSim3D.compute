@@ -320,7 +320,6 @@ void CalculateVariableViscosity (uint3 id : SV_DispatchThreadID)
 	float3 pos = PredictedPositions[id.x];
 	int3 originCell = GetCell3D(pos, smoothingRadius);
 	float sqrRadius = smoothingRadius * smoothingRadius;
-	float radius = sqrt(sqrRadius);
 
 	float3 velocity = PredictedVelocities[id.x];
 
@@ -338,6 +337,7 @@ void CalculateVariableViscosity (uint3 id : SV_DispatchThreadID)
 			float3 deltaVelocity = (0,0,0);
 			for (int j = 0; j < 27; j ++)
 			{	
+				// shoud apply radius*offset on position then getcell and take hash, but equivalent here
 				uint hash = HashCell3D(originCell + currOffset + offsets3D[j]);
 				uint key = KeyFromHash(hash, numParticles);
 				uint currIndex = SpatialOffsets[key];
@@ -353,7 +353,7 @@ void CalculateVariableViscosity (uint3 id : SV_DispatchThreadID)
 					uint neighbourIndex = indexData[0];
 
 					float3 neighbourPos = PredictedPositions[neighbourIndex];
-					float3 offsetToNeighbour = neighbourPos - (pos + currOffset);
+					float3 offsetToNeighbour = neighbourPos - (pos + currOffset*smoothingRadius);
 					float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
 
 					// Skip if not within radius
@@ -366,11 +366,11 @@ void CalculateVariableViscosity (uint3 id : SV_DispatchThreadID)
 					deltaVelocity += neighbourVelocity / neighbourDensity * SmoothingKernelPoly6(dst, smoothingRadius);
 				}
 			}
-		laplacian += (deltaVelocity-velocity)/radius;
+		laplacian += (deltaVelocity-velocity)/smoothingRadius;
 		}
 
 	}
-	Accelerations[id.x] += laplacian * Viscosities[id.x];
+	Accelerations[id.x] += laplacian * Viscosities[id.x]/smoothingRadius;
 }
 
 [numthreads(NumThreads,1,1)]
@@ -381,12 +381,11 @@ void CalculateDeltaTemperature (uint3 id : SV_DispatchThreadID)
 	float3 pos = PredictedPositions[id.x];
 	int3 originCell = GetCell3D(pos, smoothingRadius);
 	float sqrRadius = smoothingRadius * smoothingRadius;
-	float radius = sqrt(sqrRadius);
 
 	float3 temperature = Temperatures[id.x];
 
 
-	// Compute speed laplacian
+	// Compute temperature laplacian
 	float laplacian = 0;
 	for (int dim = 0; dim < 3; dim ++)
 	{
@@ -414,7 +413,7 @@ void CalculateDeltaTemperature (uint3 id : SV_DispatchThreadID)
 					uint neighbourIndex = indexData[0];
 
 					float3 neighbourPos = PredictedPositions[neighbourIndex];
-					float3 offsetToNeighbour = neighbourPos - (pos + currOffset);
+					float3 offsetToNeighbour = neighbourPos - (pos + currOffset*smoothingRadius);
 					float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
 
 					// Skip if not within radius
@@ -427,7 +426,7 @@ void CalculateDeltaTemperature (uint3 id : SV_DispatchThreadID)
 					deltaTemperature += (neighbourTemperature-temperature) / neighbourDensity * SmoothingKernelPoly6(dst, smoothingRadius);
 				}
 			}
-			laplacian += deltaTemperature/radius;
+			laplacian += deltaTemperature/sqrRadius;
 		}
 
 	}
@@ -437,7 +436,7 @@ void CalculateDeltaTemperature (uint3 id : SV_DispatchThreadID)
 	if (sqrDstToThermostat <= sqrRadius)
 	{
 		float dst= sqrt(sqrDstToThermostat);
-		laplacian += (thermostatTemperature - temperature) / thermostatDensity * SmoothingKernelPoly6(dst, smoothingRadius) / dst;
+		laplacian += (thermostatTemperature - temperature) / thermostatDensity * SmoothingKernelPoly6(dst, smoothingRadius) / sqrDstToThermostat;
 
 	}
 

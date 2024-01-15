@@ -41,9 +41,9 @@ public class Spawner3D : MonoBehaviour
                     float3 jitter = UnityEngine.Random.insideUnitSphere * jitterStrength;
                     points[i] = new float3(px, py, pz) + jitter;
                     velocities[i] = initialVel;
-                    viscosities[i] = tz*tz*0;
+                    viscosities[i] = tz*tz;
                     temperatures[i] = 1273*ty;
-                    thermicConductivities[i] = 100.9f;
+                    thermicConductivities[i] = 0.9f;
                     zeros[i] = new float3(0,0,0);
                     i++;
                 }

@@ -107,7 +107,7 @@ public class Simulation3D : MonoBehaviour
         ComputeHelper.SetBuffer(compute, densityBuffer, "Densities", externalForcesKernel, densityKernel, pressureKernel, viscosityKernel, variableViscosityKernel, temperatureKernel);
         ComputeHelper.SetBuffer(compute, viscosityBuffer, "Viscosities", viscosityKernel, variableViscosityKernel);
 
-        ComputeHelper.SetBuffer(compute, temperatureBuffer, "Temperatures", temperatureKernel, updateTemperatureKernel);
+        ComputeHelper.SetBuffer(compute, temperatureBuffer, "Temperatures", variableViscosityKernel, temperatureKernel, updateTemperatureKernel);
         ComputeHelper.SetBuffer(compute, deltaTemperatureBuffer, "DeltaTemperatures", temperatureKernel, updateTemperatureKernel);
         ComputeHelper.SetBuffer(compute, thermicConductivityBuffer, "ThermicConductivities", temperatureKernel);
 
@@ -256,10 +256,6 @@ public class Simulation3D : MonoBehaviour
         temperatureBuffer.SetData(spawnData.temperatures);
         viscosityBuffer.SetData(spawnData.viscosities);
         thermicConductivityBuffer.SetData(spawnData.thermicConductivities);
-        k1Buffer.SetData(spawnData.zeros);
-        k2Buffer.SetData(spawnData.zeros);
-        k3Buffer.SetData(spawnData.zeros);
-        k4Buffer.SetData(spawnData.zeros);
     }
 
     void HandleInput()
@@ -284,7 +280,7 @@ public class Simulation3D : MonoBehaviour
 
     void OnDestroy()
     {
-        ComputeHelper.Release(positionBuffer, predictedPositionBuffer, velocityBuffer, densityBuffer, viscosityBuffer, k1Buffer, temperatureBuffer, spatialIndices, spatialOffsets); 
+        ComputeHelper.Release(positionBuffer, predictedPositionBuffer, velocityBuffer, predictedVelocityBuffer, densityBuffer, viscosityBuffer, k1Buffer, k2Buffer, k3Buffer, k4Buffer, temperatureBuffer, deltaTemperatureBuffer, thermicConductivityBuffer, spatialIndices, spatialOffsets); 
     }
 
     void OnDrawGizmos()
