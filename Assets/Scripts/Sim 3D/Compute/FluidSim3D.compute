@@ -1,12 +1,11 @@
-#pragma kernel PredictPosition
+#pragma kernel Prediction
 #pragma kernel ExternalForces
 #pragma kernel UpdateSpatialHash
 #pragma kernel CalculateDensity
 #pragma kernel CalculatePressureForce
-#pragma kernel CalculateViscosity
 #pragma kernel UpdatePosition
-#pragma kernel CalculateVariableViscosity
-#pragma kernel CalculateDeltaTemperature
+#pragma kernel CalculateLaplacians
+// #pragma kernel CalculateDeltaTemperature
 #pragma kernel UpdateTemperature
 
 // Includes
@@ -23,15 +22,18 @@ RWStructuredBuffer<float3> k1;
 RWStructuredBuffer<float3> k2;
 RWStructuredBuffer<float3> k3;
 RWStructuredBuffer<float3> k4;
+RWStructuredBuffer<float> h1;
+RWStructuredBuffer<float> h2;
+RWStructuredBuffer<float> h3;
+RWStructuredBuffer<float> h4;
 RWStructuredBuffer<float3> Velocities;
 RWStructuredBuffer<float3> PredictedVelocities;
 RWStructuredBuffer<float2> Densities; // Density, Near Density
 RWStructuredBuffer<uint3> SpatialIndices; // used for spatial hashing
 RWStructuredBuffer<uint> SpatialOffsets; // used for spatial hashing
-RWStructuredBuffer<float> Viscosities; 
 RWStructuredBuffer<float> Temperatures; 
 RWStructuredBuffer<float> DeltaTemperatures; 
-RWStructuredBuffer<float> ThermicConductivities; 
+RWStructuredBuffer<float3> PredictedTemperaturesViscositiesConductivitiesBuffer;
 
 // Settings
 const uint numParticles;
@@ -50,6 +52,7 @@ const float3 centre;
 const float3 thermostatPosition;
 const float thermostatTemperature;
 const float thermostatDensity;
+const float thermostatConductivity;
 
 const float4x4 localToWorld;
 const float4x4 worldToLocal;
@@ -102,13 +105,14 @@ void ResolveCollisions(uint particleIndex)
 }
 
 [numthreads(NumThreads,1,1)]
-void PredictPosition (uint3 id : SV_DispatchThreadID)
+void Prediction (uint3 id : SV_DispatchThreadID)
 {
 	if (id.x >= numParticles) return;
 
 	// Predict
 	PredictedVelocities[id.x] = Velocities[id.x] + Accelerations[id.x] * deltaTime;
 	PredictedPositions[id.x] = Positions[id.x] + PredictedVelocities[id.x] * deltaTime;
+	PredictedTemperaturesViscositiesConductivitiesBuffer[id.x][0] = Temperatures[id.x] + DeltaTemperatures[id.x] * deltaTime;
 }
 
 [numthreads(NumThreads,1,1)]
@@ -244,57 +248,6 @@ void CalculatePressureForce (uint3 id : SV_DispatchThreadID)
 }
 
 
-[numthreads(NumThreads,1,1)]
-void CalculateViscosity (uint3 id : SV_DispatchThreadID)
-{
-	if (id.x >= numParticles) return;
-		
-	float3 pos = PredictedPositions[id.x];
-	int3 originCell = GetCell3D(pos, smoothingRadius);
-	float sqrRadius = smoothingRadius * smoothingRadius;
-
-	float3 velocity = PredictedVelocities[id.x];
-
-	// Neighbour search
-	for (int i = 0; i < 27; i ++)
-	{
-		uint hash = HashCell3D(originCell + offsets3D[i]);
-		uint key = KeyFromHash(hash, numParticles);
-		uint currIndex = SpatialOffsets[key];
-
-		while (currIndex < numParticles)
-		{
-			uint3 indexData = SpatialIndices[currIndex];
-			currIndex ++;
-			// Exit if no longer looking at correct bin
-			if (indexData[2] != key) break;
-			// Skip if hash does not match
-			if (indexData[1] != hash) continue;
-
-			uint neighbourIndex = indexData[0];
-			// Skip if looking at self
-			if (neighbourIndex == id.x) continue;
-
-			float3 neighbourPos = PredictedPositions[neighbourIndex];
-			float3 offsetToNeighbour = neighbourPos - pos;
-			float sqrDstToNeighbour = max(0.01, dot(offsetToNeighbour, offsetToNeighbour));
-
-			// Skip if not within radius
-			if (sqrDstToNeighbour > sqrRadius) continue;
-
-			// Calculate viscosity
-			float dst = sqrt(sqrDstToNeighbour);
-			float3 neighbourVelocity = PredictedVelocities[neighbourIndex];
-			float3 deltaPredictedVelocities = neighbourVelocity - velocity;
-
-			float3 viscosityForce = ( deltaPredictedVelocities - dot(deltaPredictedVelocities, offsetToNeighbour) * offsetToNeighbour / sqrDstToNeighbour) / dst * SmoothingKernelPoly6(dst, smoothingRadius) * Viscosities[id.x];
-			// Accelerations[id.x] += viscosityForce / Densities[neighbourIndex][0] ;
-			// Accelerations[neighbourIndex] -= viscosityForce/ Densities[neighbourIndex][0];
-			//Accelerations[id.x]+= (neighbourVelocity - velocity) * Viscosities[id.x] / Densities[id.x][0] * SmoothingKernelPoly6(dst, smoothingRadius);
-		}
-	}
-}
-
 [numthreads(NumThreads, 1, 1)]
 void UpdatePosition(uint3 id : SV_DispatchThreadID)
 {
@@ -313,7 +266,7 @@ void UpdatePosition(uint3 id : SV_DispatchThreadID)
 }
 
 [numthreads(NumThreads,1,1)]
-void CalculateVariableViscosity (uint3 id : SV_DispatchThreadID)
+void CalculateLaplacians (uint3 id : SV_DispatchThreadID)
 {
 	if (id.x >= numParticles) return;
 		
@@ -322,10 +275,14 @@ void CalculateVariableViscosity (uint3 id : SV_DispatchThreadID)
 	float sqrRadius = smoothingRadius * smoothingRadius;
 
 	float3 velocity = PredictedVelocities[id.x];
-
+	float temperature = PredictedTemperaturesViscositiesConductivitiesBuffer[id.x][0];
+	float viscosity = PredictedTemperaturesViscositiesConductivitiesBuffer[id.x][1];
+	float conductivity = PredictedTemperaturesViscositiesConductivitiesBuffer[id.x][2];
+	float density = Densities[id.x];
 
 	// Compute speed laplacian
-	float3 laplacian = (0,0,0);
+	float3 velocityLaplacian = (0,0,0);
+	float heatFlux = 0;
 	for (int dim = 0; dim < 3; dim ++)
 	{
 		for(int i = 0; i<2;i++)
@@ -334,7 +291,11 @@ void CalculateVariableViscosity (uint3 id : SV_DispatchThreadID)
 		
 			int3 currOffset = (0,0,0);
 			currOffset[dim]=2*i-1;
-			float3 deltaVelocity = (0,0,0);
+			float adjacentDensity = 0;
+			float3 adjacentVelocity = (0,0,0);
+			float adjacentTemperature = 0;
+			float adjacentViscosity = 0;
+			float adjacentConductivity = 0;
 			for (int j = 0; j < 27; j ++)
 			{	
 				// shoud apply radius*offset on position then getcell and take hash, but equivalent here
@@ -361,96 +322,126 @@ void CalculateVariableViscosity (uint3 id : SV_DispatchThreadID)
 
 					// Calculate viscosity
 					float dst = sqrt(sqrDstToNeighbour);
+
+					float neighbourTemperature = PredictedTemperaturesViscositiesConductivitiesBuffer[neighbourIndex][0];
+					float neighbourViscosity = PredictedTemperaturesViscositiesConductivitiesBuffer[neighbourIndex][1];
+					float neighbourConductivity = PredictedTemperaturesViscositiesConductivitiesBuffer[neighbourIndex][2];
 					float3 neighbourVelocity = PredictedVelocities[neighbourIndex];
 					float neighbourDensity = Densities[neighbourIndex][0];
-					deltaVelocity += neighbourVelocity / neighbourDensity * SmoothingKernelPoly6(dst, smoothingRadius);
+
+					float tmp =  DensityKernel(dst, smoothingRadius) / neighbourDensity;
+
+					adjacentDensity += neighbourDensity * tmp;
+					adjacentVelocity += neighbourVelocity * tmp;
+					adjacentTemperature += neighbourTemperature * tmp;
+					adjacentViscosity += neighbourViscosity * tmp;
+					adjacentConductivity += neighbourConductivity * tmp;
+
 				}
+
 			}
-		laplacian += (deltaVelocity-velocity)/smoothingRadius;
+			float sharedConductivity = (density * conductivity + adjacentDensity * adjacentConductivity)/(density+adjacentDensity);
+			heatFlux += (adjacentTemperature-temperature) / smoothingRadius * sharedConductivity;
+
+			velocityLaplacian += (adjacentVelocity-velocity);
 		}
 
 	}
-	Accelerations[id.x] += laplacian * Viscosities[id.x]/smoothingRadius;
-}
-
-[numthreads(NumThreads,1,1)]
-void CalculateDeltaTemperature (uint3 id : SV_DispatchThreadID)
-{
-	if (id.x >= numParticles) return;
-		
-	float3 pos = PredictedPositions[id.x];
-	int3 originCell = GetCell3D(pos, smoothingRadius);
-	float sqrRadius = smoothingRadius * smoothingRadius;
-
-	float temperature = Temperatures[id.x];
-	float density = Densities[id.x];
-
+	Accelerations[id.x] += velocityLaplacian * viscosity / sqrRadius;
 
 	float3 offsetToThermostat = thermostatPosition - pos;
 	float sqrDstToThermostat = dot(offsetToThermostat, offsetToThermostat);
 	if (sqrDstToThermostat <= sqrRadius)
 	{
-		DeltaTemperatures[id.x] = (thermostatTemperature - Temperatures[id.x]);
+		float dst=sqrt(sqrDstToThermostat);
+		float sharedConductivity = (density * conductivity + thermostatDensity * thermostatConductivity)/(density+thermostatDensity);
+		DeltaTemperatures[id.x] = (thermostatTemperature - temperature) / dst * sharedConductivity / density;
 		return;
 	}
+	DeltaTemperatures[id.x] += heatFlux / density;
+}
 
-	// Compute temperature laplacian
-	float laplacian = 0;
-	for (int dim = 0; dim < 3; dim ++)
-	{
-		for(int i = 0; i<2;i++)
-		{
+// [numthreads(NumThreads,1,1)]
+// void CalculateDeltaTemperature (uint3 id : SV_DispatchThreadID)
+// {
+// 	if (id.x >= numParticles) return;
+		
+// 	float3 pos = PredictedPositions[id.x];
+// 	int3 originCell = GetCell3D(pos, smoothingRadius);
+// 	float sqrRadius = smoothingRadius * smoothingRadius;
+
+// 	float temperature = Temperatures[id.x];
+// 	float density = Densities[id.x];
+
+
+// 	float3 offsetToThermostat = thermostatPosition - pos;
+// 	float sqrDstToThermostat = dot(offsetToThermostat, offsetToThermostat);
+// 	if (sqrDstToThermostat <= sqrRadius)
+// 	{
+// 		DeltaTemperatures[id.x] = (thermostatTemperature - Temperatures[id.x]);
+// 		return;
+// 	}
+
+// 	// Compute temperature laplacian
+// 	float laplacian = 0;
+// 	for (int dim = 0; dim < 3; dim ++)
+// 	{
+// 		for(int i = 0; i<2;i++)
+// 		{
 
 		
-			int3 currOffset = (0,0,0);
-			currOffset[dim]=2*i-1;
-			float heatFlux = 0;
-			for (int j = 0; j < 27; j ++)
-			{	
-				uint hash = HashCell3D(originCell + currOffset + offsets3D[j]);
-				uint key = KeyFromHash(hash, numParticles);
-				uint currIndex = SpatialOffsets[key];
-				while (currIndex < numParticles)
-				{
-					uint3 indexData = SpatialIndices[currIndex];
-					currIndex ++;
-					// Exit if no longer looking at correct bin
-					if (indexData[2] != key) break;
-					// Skip if hash does not match
-					if (indexData[1] != hash) continue;
+// 			int3 currOffset = (0,0,0);
+// 			currOffset[dim]=2*i-1;
+// 			float heatFlux = 0;
+// 			for (int j = 0; j < 27; j ++)
+// 			{	
+// 				uint hash = HashCell3D(originCell + currOffset + offsets3D[j]);
+// 				uint key = KeyFromHash(hash, numParticles);
+// 				uint currIndex = SpatialOffsets[key];
+// 				while (currIndex < numParticles)
+// 				{
+// 					uint3 indexData = SpatialIndices[currIndex];
+// 					currIndex ++;
+// 					// Exit if no longer looking at correct bin
+// 					if (indexData[2] != key) break;
+// 					// Skip if hash does not match
+// 					if (indexData[1] != hash) continue;
 
-					uint neighbourIndex = indexData[0];
+// 					uint neighbourIndex = indexData[0];
 
-					float3 neighbourPos = PredictedPositions[neighbourIndex];
-					float3 offsetToNeighbour = neighbourPos - (pos + currOffset*smoothingRadius);
-					float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
+// 					float3 neighbourPos = PredictedPositions[neighbourIndex];
+// 					float3 offsetToNeighbour = neighbourPos - (pos + currOffset*smoothingRadius);
+// 					float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
 
-					// Skip if not within radius
-					if (sqrDstToNeighbour > sqrRadius) continue;
+// 					// Skip if not within radius
+// 					if (sqrDstToNeighbour > sqrRadius) continue;
 
-					// Calculate T(x+delta_x)
-					float dst = sqrt(sqrDstToNeighbour);
-					float neighbourTemperature = Temperatures[neighbourIndex];
-					float neighbourDensity = Densities[neighbourIndex];
-					float sharedConductivity = (density * ThermicConductivities[id.x] + neighbourDensity *ThermicConductivities[neighbourIndex])/(density+neighbourDensity);
-					heatFlux += (neighbourTemperature-temperature) / dst * sharedConductivity * SmoothingKernelPoly6(dst, smoothingRadius);
-				}
-			}
-			laplacian += heatFlux;
-		}
+// 					// Calculate T(x+delta_x)
+// 					float dst = sqrt(sqrDstToNeighbour);
+// 					float neighbourTemperature = Temperatures[neighbourIndex];
+// 					float neighbourDensity = Densities[neighbourIndex];
+// 					float sharedConductivity = (density * ThermicConductivities[id.x] + neighbourDensity *ThermicConductivities[neighbourIndex])/(density+neighbourDensity);
+// 					heatFlux += (neighbourTemperature-temperature) / dst * sharedConductivity * SmoothingKernelPoly6(dst, smoothingRadius);
+// 				}
+// 			}
+// 			laplacian += heatFlux;
+// 		}
 
-	}
+// 	}
 
 
 
-	DeltaTemperatures[id.x] = laplacian / density;
-}
+// 	DeltaTemperatures[id.x] = laplacian / density;
+// }
 
 
 [numthreads(NumThreads, 1, 1)]
 void UpdateTemperature(uint3 id : SV_DispatchThreadID)
 {
 	if (id.x >= numParticles) return;
-	Temperatures[id.x]+=DeltaTemperatures[id.x]*deltaTime;
-	DeltaTemperatures[id.x]=0;
+	Temperatures[id.x]+=(h1[id.x]+2*h2[id.x]+2*h3[id.x]+h4[id.x])*deltaTime/6;
+	h1[id.x]=0;
+	h2[id.x]=0;
+	h3[id.x]=0;
+	h4[id.x]=0;
 }
