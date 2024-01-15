@@ -43,7 +43,7 @@ public class Spawner3D : MonoBehaviour
                     velocities[i] = initialVel;
                     viscosities[i] = tz*tz;
                     temperatures[i] = 1273*ty;
-                    thermicConductivities[i] = 0.9f;
+                    thermicConductivities[i] = 1+99f*tx;
                     zeros[i] = new float3(0,0,0);
                     i++;
                 }

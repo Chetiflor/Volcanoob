@@ -34,6 +34,10 @@ public class Simulation3D : MonoBehaviour
     public ComputeBuffer k2Buffer { get; private set; }
     public ComputeBuffer k3Buffer { get; private set; }
     public ComputeBuffer k4Buffer { get; private set; }
+    public ComputeBuffer h1Buffer { get; private set; }
+    public ComputeBuffer h2Buffer { get; private set; }
+    public ComputeBuffer h3Buffer { get; private set; }
+    public ComputeBuffer h4Buffer { get; private set; }
     public ComputeBuffer velocityBuffer { get; private set; }
     public ComputeBuffer densityBuffer { get; private set; }
     public ComputeBuffer viscosityBuffer { get; private set; }
@@ -84,6 +88,10 @@ public class Simulation3D : MonoBehaviour
         k2Buffer = ComputeHelper.CreateStructuredBuffer<float3>(numParticles);
         k3Buffer = ComputeHelper.CreateStructuredBuffer<float3>(numParticles);
         k4Buffer = ComputeHelper.CreateStructuredBuffer<float3>(numParticles);
+        h1Buffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles);
+        h2Buffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles);
+        h3Buffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles);
+        h4Buffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles);
         temperatureBuffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles);
         thermicConductivityBuffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles);
         deltaTemperatureBuffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles);
@@ -115,6 +123,11 @@ public class Simulation3D : MonoBehaviour
         ComputeHelper.SetBuffer(compute, k2Buffer, "k2", updatePositionKernel);
         ComputeHelper.SetBuffer(compute, k3Buffer, "k3", updatePositionKernel);
         ComputeHelper.SetBuffer(compute, k4Buffer, "k4", updatePositionKernel);
+
+        ComputeHelper.SetBuffer(compute, k1Buffer, "h1", updateTemperatureKernel);
+        ComputeHelper.SetBuffer(compute, k2Buffer, "h2", updateTemperatureKernel);
+        ComputeHelper.SetBuffer(compute, k3Buffer, "h3", updateTemperatureKernel);
+        ComputeHelper.SetBuffer(compute, k4Buffer, "h4", updateTemperatureKernel);
 
         compute.SetInt("numParticles", positionBuffer.count);
 

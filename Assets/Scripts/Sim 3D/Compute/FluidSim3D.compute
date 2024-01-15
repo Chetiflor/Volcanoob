@@ -382,8 +382,17 @@ void CalculateDeltaTemperature (uint3 id : SV_DispatchThreadID)
 	int3 originCell = GetCell3D(pos, smoothingRadius);
 	float sqrRadius = smoothingRadius * smoothingRadius;
 
-	float3 temperature = Temperatures[id.x];
+	float temperature = Temperatures[id.x];
+	float density = Densities[id.x];
 
+
+	float3 offsetToThermostat = thermostatPosition - pos;
+	float sqrDstToThermostat = dot(offsetToThermostat, offsetToThermostat);
+	if (sqrDstToThermostat <= sqrRadius)
+	{
+		DeltaTemperatures[id.x] = (thermostatTemperature - Temperatures[id.x]);
+		return;
+	}
 
 	// Compute temperature laplacian
 	float laplacian = 0;
@@ -395,7 +404,7 @@ void CalculateDeltaTemperature (uint3 id : SV_DispatchThreadID)
 		
 			int3 currOffset = (0,0,0);
 			currOffset[dim]=2*i-1;
-			float deltaTemperature = 0;
+			float heatFlux = 0;
 			for (int j = 0; j < 27; j ++)
 			{	
 				uint hash = HashCell3D(originCell + currOffset + offsets3D[j]);
@@ -422,26 +431,21 @@ void CalculateDeltaTemperature (uint3 id : SV_DispatchThreadID)
 					// Calculate T(x+delta_x)
 					float dst = sqrt(sqrDstToNeighbour);
 					float neighbourTemperature = Temperatures[neighbourIndex];
-					float neighbourDensity = Densities[neighbourIndex][0];
-					deltaTemperature += (neighbourTemperature-temperature) / neighbourDensity * SmoothingKernelPoly6(dst, smoothingRadius);
+					float neighbourDensity = Densities[neighbourIndex];
+					float sharedConductivity = (density * ThermicConductivities[id.x] + neighbourDensity *ThermicConductivities[neighbourIndex])/(density+neighbourDensity);
+					heatFlux += (neighbourTemperature-temperature) / dst * sharedConductivity * SmoothingKernelPoly6(dst, smoothingRadius);
 				}
 			}
-			laplacian += deltaTemperature/sqrRadius;
+			laplacian += heatFlux;
 		}
 
 	}
 
-	float3 offsetToThermostat = thermostatPosition - pos;
-	float sqrDstToThermostat = dot(offsetToThermostat, offsetToThermostat);
-	if (sqrDstToThermostat <= sqrRadius)
-	{
-		float dst= sqrt(sqrDstToThermostat);
-		laplacian += (thermostatTemperature - temperature) / thermostatDensity * SmoothingKernelPoly6(dst, smoothingRadius) / sqrDstToThermostat;
 
-	}
 
-	DeltaTemperatures[id.x] = laplacian * ThermicConductivities[id.x];
+	DeltaTemperatures[id.x] = laplacian / density;
 }
+
 
 [numthreads(NumThreads, 1, 1)]
 void UpdateTemperature(uint3 id : SV_DispatchThreadID)
