@@ -42,7 +42,7 @@ public class Spawner3D : MonoBehaviour
                     velocities[i] = initialVel;
                     float viscosity = tz*tz;
                     temperatures[i] = 1273*ty;
-                    float thermicConductivity = 1+4*tx*tx;
+                    float thermicConductivity = 1000f+tx*100f;
                     predictedTemperaturesViscositiesConductivities[i] = new float3(temperatures[i],viscosity,thermicConductivity);
                     zeros[i] = new float3(0,0,0);
                     i++;

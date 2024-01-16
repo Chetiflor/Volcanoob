@@ -361,78 +361,7 @@ void CalculateLaplacians (uint3 id : SV_DispatchThreadID)
 	DeltaTemperatures[id.x] += heatFlux / density;
 }
 
-// [numthreads(NumThreads,1,1)]
-// void CalculateDeltaTemperature (uint3 id : SV_DispatchThreadID)
-// {
-// 	if (id.x >= numParticles) return;
-		
-// 	float3 pos = PredictedPositions[id.x];
-// 	int3 originCell = GetCell3D(pos, smoothingRadius);
-// 	float sqrRadius = smoothingRadius * smoothingRadius;
 
-// 	float temperature = Temperatures[id.x];
-// 	float density = Densities[id.x];
-
-
-// 	float3 offsetToThermostat = thermostatPosition - pos;
-// 	float sqrDstToThermostat = dot(offsetToThermostat, offsetToThermostat);
-// 	if (sqrDstToThermostat <= sqrRadius)
-// 	{
-// 		DeltaTemperatures[id.x] = (thermostatTemperature - Temperatures[id.x]);
-// 		return;
-// 	}
-
-// 	// Compute temperature laplacian
-// 	float laplacian = 0;
-// 	for (int dim = 0; dim < 3; dim ++)
-// 	{
-// 		for(int i = 0; i<2;i++)
-// 		{
-
-		
-// 			int3 currOffset = (0,0,0);
-// 			currOffset[dim]=2*i-1;
-// 			float heatFlux = 0;
-// 			for (int j = 0; j < 27; j ++)
-// 			{	
-// 				uint hash = HashCell3D(originCell + currOffset + offsets3D[j]);
-// 				uint key = KeyFromHash(hash, numParticles);
-// 				uint currIndex = SpatialOffsets[key];
-// 				while (currIndex < numParticles)
-// 				{
-// 					uint3 indexData = SpatialIndices[currIndex];
-// 					currIndex ++;
-// 					// Exit if no longer looking at correct bin
-// 					if (indexData[2] != key) break;
-// 					// Skip if hash does not match
-// 					if (indexData[1] != hash) continue;
-
-// 					uint neighbourIndex = indexData[0];
-
-// 					float3 neighbourPos = PredictedPositions[neighbourIndex];
-// 					float3 offsetToNeighbour = neighbourPos - (pos + currOffset*smoothingRadius);
-// 					float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
-
-// 					// Skip if not within radius
-// 					if (sqrDstToNeighbour > sqrRadius) continue;
-
-// 					// Calculate T(x+delta_x)
-// 					float dst = sqrt(sqrDstToNeighbour);
-// 					float neighbourTemperature = Temperatures[neighbourIndex];
-// 					float neighbourDensity = Densities[neighbourIndex];
-// 					float sharedConductivity = (density * ThermicConductivities[id.x] + neighbourDensity *ThermicConductivities[neighbourIndex])/(density+neighbourDensity);
-// 					heatFlux += (neighbourTemperature-temperature) / dst * sharedConductivity * SmoothingKernelPoly6(dst, smoothingRadius);
-// 				}
-// 			}
-// 			laplacian += heatFlux;
-// 		}
-
-// 	}
-
-
-
-// 	DeltaTemperatures[id.x] = laplacian / density;
-// }
 
 
 [numthreads(NumThreads, 1, 1)]

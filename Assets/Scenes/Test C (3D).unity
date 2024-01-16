@@ -266,9 +266,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c8b3b79f98be3f34e8fefade4cef2ade, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  timeScale: 0.3
+  timeScale: 0.2
   fixedTimeStep: 0
-  iterationsPerFrame: 9
+  iterationsPerFrame: 3
   gravity: -10
   collisionDamping: 0.95
   smoothingRadius: 0.2
@@ -276,9 +276,10 @@ MonoBehaviour:
   pressureMultiplier: 288
   nearPressureMultiplier: 2.25
   viscosityStrength: 0.001
-  thermostatPosition: {x: 0, y: -2.4, z: 0}
+  thermostatPosition: {x: 0, y: -3, z: 0}
   thermostatTemperature: 1273
   thermostatDensity: 1000
+  thermostatConductivity: 1000
   compute: {fileID: 7200000, guid: 9443696acfd0ebe4fb503b56d952256c, type: 3}
   spawner: {fileID: 271053323}
   display: {fileID: 271053320}
@@ -566,7 +567,7 @@ Transform:
   m_GameObject: {fileID: 1230015179}
   serializedVersion: 2
   m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
-  m_LocalPosition: {x: 0, y: -0.441, z: 0}
+  m_LocalPosition: {x: 0, y: -1.305, z: 0}
   m_LocalScale: {x: 0.015, y: 0.025, z: 0.025}
   m_ConstrainProportionsScale: 0
   m_Children: []
