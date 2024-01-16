@@ -19,7 +19,7 @@ public class Spawner3D : MonoBehaviour
         float3[] points = new float3[numPoints];
         float3[] velocities = new float3[numPoints];
         float[] temperatures = new float[numPoints];
-        float3[] predictedTemperaturesViscositiesConductivities = new float3[numPoints];
+        float4[] predictedTemperaturesViscositiesConductivitiesCapacities = new float4[numPoints];
         float3[] zeros = new float3[numPoints];
         float3[] vdwValues = new float3[numPoints];
 
@@ -41,10 +41,12 @@ public class Spawner3D : MonoBehaviour
                     float3 jitter = UnityEngine.Random.insideUnitSphere * jitterStrength;
                     points[i] = new float3(px, py, pz) + jitter;
                     velocities[i] = initialVel;
-                    float viscosity = tz*tz;
-                    temperatures[i] = 1273*ty;
+                    float viscosity = 0.1f;
+                    temperatures[i] = 273+1000*ty;
                     float thermicConductivity = 1000f+tx*100f;
-                    predictedTemperaturesViscositiesConductivities[i] = new float3(temperatures[i],viscosity,thermicConductivity);
+                    float thermicCapacity = 4.184f;
+                    predictedTemperaturesViscositiesConductivitiesCapacities[i] = new float4(temperatures[i],viscosity,thermicConductivity,thermicCapacity);
+                
                     zeros[i] = new float3(0,0,0);
                     float p = 22120000f;
                     float t = 374f;
@@ -57,7 +59,7 @@ public class Spawner3D : MonoBehaviour
             }
         }
 
-        return new SpawnData() { points = points, velocities = velocities, temperatures = temperatures, zeros=zeros, predictedTemperaturesViscositiesConductivities=predictedTemperaturesViscositiesConductivities, vdwValues=vdwValues};
+        return new SpawnData() { points = points, velocities = velocities, temperatures = temperatures, zeros=zeros, predictedTemperaturesViscositiesConductivitiesCapacities=predictedTemperaturesViscositiesConductivitiesCapacities, vdwValues=vdwValues};
     }
 
     public struct SpawnData
@@ -68,7 +70,7 @@ public class Spawner3D : MonoBehaviour
         public float[] thermicConductivities;
         public float[] viscosities;
         public float3[] zeros;
-        public float3[] predictedTemperaturesViscositiesConductivities;
+        public float4[] predictedTemperaturesViscositiesConductivitiesCapacities;
         public float3[] vdwValues;
     }
 

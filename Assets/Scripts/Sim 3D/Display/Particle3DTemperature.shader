@@ -25,7 +25,7 @@ Shader "Custom/Particle3DTemperature"
 
 		#ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
 			StructuredBuffer<float3> Positions;
-			StructuredBuffer<float3> TemperaturesViscositiesConductivities;
+			StructuredBuffer<float4> TemperaturesViscositiesConductivitiesCapacities;
 		#endif
 
 
@@ -43,7 +43,7 @@ Shader "Custom/Particle3DTemperature"
 				o.uv_MainTex = v.texcoord.xy;
 
 	#ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
-				o.colour = tex2Dlod(ColourMap, float4(TemperaturesViscositiesConductivities[unity_InstanceID][0]/1273, 0.5,0,0));
+				o.colour = tex2Dlod(ColourMap, float4(TemperaturesViscositiesConductivitiesCapacities[unity_InstanceID][0]/1273, 0.5,0,0));
 	#endif
 			}
 

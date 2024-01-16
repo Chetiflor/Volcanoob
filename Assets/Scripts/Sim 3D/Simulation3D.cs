@@ -14,7 +14,8 @@ public class Simulation3D : MonoBehaviour
     public int iterationsPerFrame;
     public float gravity = -10;
     [Range(0, 1)] public float collisionDamping = 0.05f;
-    public float smoothingRadius = 0.002f;
+    public float smoothingRadius = 0.2f;
+    public float particleDimension = 0.002f;
     public float targetDensity;
     public float pressureMultiplier;
     public float nearPressureMultiplier;
@@ -24,6 +25,8 @@ public class Simulation3D : MonoBehaviour
     public float thermostatDensity=1000;
     public float thermostatConductivity=1000;
     public float molesBym3 = 55000;
+    public float athmospherePressure = 100000;
+    public float airDensity = 1.3f;
     float molesByParticule;
 
     [Header("References")]
@@ -53,7 +56,7 @@ public class Simulation3D : MonoBehaviour
     public ComputeBuffer deltaTemperatureBuffer { get; private set; }
     public ComputeBuffer predictedPositionBuffer;
     public ComputeBuffer predictedVelocityBuffer;
-    public ComputeBuffer predictedTemperatureViscosityConductivityBuffer;
+    public ComputeBuffer predictedTemperatureViscosityConductivityCapacityBuffer;
     public ComputeBuffer vdwValueBuffer; // van der walls equation: M(molar mass), a(cohesion term), b(molar covolume)
     ComputeBuffer spatialIndices;
     ComputeBuffer spatialOffsets;
@@ -108,7 +111,7 @@ public class Simulation3D : MonoBehaviour
         spatialIndices = ComputeHelper.CreateStructuredBuffer<uint3>(numParticles);
         spatialOffsets = ComputeHelper.CreateStructuredBuffer<uint>(numParticles);
         
-        predictedTemperatureViscosityConductivityBuffer = ComputeHelper.CreateStructuredBuffer<float3>(numParticles);
+        predictedTemperatureViscosityConductivityCapacityBuffer = ComputeHelper.CreateStructuredBuffer<float4>(numParticles);
         vdwValueBuffer = ComputeHelper.CreateStructuredBuffer<float3>(numParticles);
 
  
@@ -128,7 +131,7 @@ public class Simulation3D : MonoBehaviour
         ComputeHelper.SetBuffer(compute, vdwValueBuffer, "VDWValues", densityPressureKernel, pressureForcesKernel);
 
         ComputeHelper.SetBuffer(compute, temperatureBuffer, "Temperatures", updateTemperatureKernel,predictionKernel);
-        ComputeHelper.SetBuffer(compute, predictedTemperatureViscosityConductivityBuffer, "PredictedTemperaturesViscositiesConductivities", densityPressureKernel, laplacianKernel,predictionKernel);
+        ComputeHelper.SetBuffer(compute, predictedTemperatureViscosityConductivityCapacityBuffer, "PredictedTemperaturesViscositiesConductivitiesCapacities", densityPressureKernel, laplacianKernel,predictionKernel);
 
         ComputeHelper.SetBuffer(compute, k1Buffer, "k1", updatePositionKernel);
         ComputeHelper.SetBuffer(compute, k2Buffer, "k2", updatePositionKernel);
@@ -253,7 +256,8 @@ public class Simulation3D : MonoBehaviour
         compute.SetFloat("gravity", gravity);
         compute.SetFloat("collisionDamping", collisionDamping);
         compute.SetFloat("smoothingRadius", smoothingRadius);
-        molesByParticule = molesBym3*smoothingRadius*smoothingRadius*smoothingRadius/1000000;
+        compute.SetFloat("particleDimension", particleDimension);
+        molesByParticule = molesBym3*particleDimension*particleDimension*particleDimension;
         compute.SetFloat("molesByParticule", molesByParticule);
         compute.SetFloat("targetDensity", targetDensity);
         compute.SetFloat("pressureMultiplier", pressureMultiplier);
@@ -262,6 +266,8 @@ public class Simulation3D : MonoBehaviour
         compute.SetFloat("thermostatTemperature", thermostatTemperature);
         compute.SetFloat("thermostatDensity", thermostatDensity);
         compute.SetFloat("thermostatConductivity", thermostatConductivity);
+        compute.SetFloat("athmospherePressure", athmospherePressure);
+        compute.SetFloat("airDensity", airDensity);
         compute.SetVector("boundsSize", simBoundsSize);
         compute.SetVector("centre", simBoundsCentre);
         compute.SetVector("thermostatPosition", thermostatPosition);
@@ -280,7 +286,7 @@ public class Simulation3D : MonoBehaviour
         velocityBuffer.SetData(spawnData.velocities);
         predictedVelocityBuffer.SetData(spawnData.velocities);
         temperatureBuffer.SetData(spawnData.temperatures);
-        predictedTemperatureViscosityConductivityBuffer.SetData(spawnData.predictedTemperaturesViscositiesConductivities);
+        predictedTemperatureViscosityConductivityCapacityBuffer.SetData(spawnData.predictedTemperaturesViscositiesConductivitiesCapacities);
         vdwValueBuffer.SetData(spawnData.vdwValues);
     }
 

@@ -266,7 +266,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c8b3b79f98be3f34e8fefade4cef2ade, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  timeScale: 0.01
+  timeScale: 0.1
   fixedTimeStep: 0
   iterationsPerFrame: 1
   gravity: -10

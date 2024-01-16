@@ -33,7 +33,7 @@ RWStructuredBuffer<uint3> SpatialIndices; // used for spatial hashing
 RWStructuredBuffer<uint> SpatialOffsets; // used for spatial hashing
 RWStructuredBuffer<float> Temperatures; 
 RWStructuredBuffer<float> DeltaTemperatures; 
-RWStructuredBuffer<float3> PredictedTemperaturesViscositiesConductivities;
+RWStructuredBuffer<float4> PredictedTemperaturesViscositiesConductivitiesCapacities;
 RWStructuredBuffer<float3> VDWValues;
 
 // Settings
@@ -48,6 +48,7 @@ const float nearPressureMultiplier;
 const float viscosityStrength;
 const float edgeForce;
 const float edgeForceDst;
+const float particleDimension;
 const float3 boundsSize;
 const float3 centre;
 const float3 thermostatPosition;
@@ -58,6 +59,8 @@ const float R; //universal gas constant
 const float molesByParticule;
 const float4x4 localToWorld;
 const float4x4 worldToLocal;
+const float ahtmospherePressure;
+const float airDensity;
 
 const float2 interactionInputPoint;
 const float interactionInputStrength;
@@ -124,7 +127,7 @@ void Prediction (uint3 id : SV_DispatchThreadID)
 	// Predict
 	PredictedVelocities[id.x] = Velocities[id.x] + Accelerations[id.x] * deltaTime;
 	PredictedPositions[id.x] = Positions[id.x] + PredictedVelocities[id.x] * deltaTime;
-	PredictedTemperaturesViscositiesConductivities[id.x][0] = Temperatures[id.x] + DeltaTemperatures[id.x] * deltaTime;
+	PredictedTemperaturesViscositiesConductivitiesCapacities[id.x][0] = Temperatures[id.x] + DeltaTemperatures[id.x] * deltaTime;
 }
 
 [numthreads(NumThreads,1,1)]
@@ -159,7 +162,7 @@ void CalculateDensityPressure (uint3 id : SV_DispatchThreadID)
 
 	float3 pos = PredictedPositions[id.x];
 	int3 originCell = GetCell3D(pos, smoothingRadius);
-	float sqrRadius = smoothingRadius * smoothingRadius;
+	float sqrRadius = smoothingRadius * smoothingRadius; 
 	float density = 0;
 	float nearDensity = 0;
 
@@ -189,12 +192,13 @@ void CalculateDensityPressure (uint3 id : SV_DispatchThreadID)
 
 			// Calculate density and near density
 			float dst = sqrt(sqrDstToNeighbour);
-			density += DensityKernel(dst, smoothingRadius) * molesByParticule * VDWValues[neighbourIndex][0]/(sqrRadius*smoothingRadius)*1000000;
+			float neighbourVolumicMass = molesByParticule * VDWValues[neighbourIndex][0]/(4/3*PI*particleDimension*particleDimension*particleDimension);
+			density += DensityKernel(dst, smoothingRadius) * neighbourVolumicMass;
 			nearDensity += NearDensityKernel(dst, smoothingRadius);
 		}
 	}
-	
-	DensitiesPressures[id.x] = float4(density, nearDensity,VDWPressureFromDensityTemperature(density,PredictedTemperaturesViscositiesConductivities[id.x][0],VDWValues[id.x][0],VDWValues[id.x][1],VDWValues[id.x][2])/10000,NearPressureFromDensity(nearDensity));
+	float pressure = VDWPressureFromDensityTemperature(density,PredictedTemperaturesViscositiesConductivitiesCapacities[id.x][0],VDWValues[id.x][0],VDWValues[id.x][1],VDWValues[id.x][2]);
+	DensitiesPressures[id.x] = float4(density, nearDensity,pressure,NearPressureFromDensity(nearDensity));
 }
 
 // void CalculateDensityPressure (uint3 id : SV_DispatchThreadID)
@@ -264,6 +268,8 @@ void PressureForce (uint3 id : SV_DispatchThreadID)
 		uint key = KeyFromHash(hash, numParticles);
 		uint currIndex = SpatialOffsets[key];
 
+		bool foundNeighbour = false;
+
 		while (currIndex < numParticles)
 		{
 			uint3 indexData = SpatialIndices[currIndex];
@@ -283,6 +289,7 @@ void PressureForce (uint3 id : SV_DispatchThreadID)
 
 			// Skip if not within radius
 			if (sqrDstToNeighbour > sqrRadius) continue;
+			foundNeighbour=true;
 
 			// Calculate pressure force
 			float densityNeighbour = DensitiesPressures[neighbourIndex][0];
@@ -293,12 +300,25 @@ void PressureForce (uint3 id : SV_DispatchThreadID)
 			float sharedPressure = (pressure + neighbourPressure) / 2;
 			float sharedNearPressure = (nearPressure + neighbourPressureNear) / 2;
 
+			float deltaPressure = neighbourPressure - pressure;
+
 			float dst = sqrt(sqrDstToNeighbour);
 			float3 dir = dst > 0 ? offsetToNeighbour / dst : float3(0, 1, 0);
 
-			pressureForce += dir * DensityDerivative(dst, smoothingRadius) * sharedPressure / densityNeighbour;
+			pressureForce -= dir * DensityDerivative(dst, smoothingRadius) * sharedPressure / densityNeighbour  * (particleDimension * particleDimension * 4 * PI ); //normalize by neighbour density
 			//pressureForce += dir * NearDensityDerivative(dst, smoothingRadius) * sharedNearPressure / nearDensityNeighbour;
 		}
+		// if (!foundNeighbour)
+		// {
+		// 	float dst = sqrt(float(dot(offsets3D[i],offsets3D[i])));
+		// 	if(dst!=0)
+		// 	{
+
+		// 		float3 dir = (float3)offsets3D[i]/dst; // in same cell, should find itself ?
+		// 		float sharedPressure = (pressure + ahtmospherePressure) / 2 ;
+		// 		pressureForce -= dir * DensityDerivative(0, smoothingRadius) * sharedPressure / airDensity * particleDimension * particleDimension * 4 * 3.14;
+		// 	}
+		// }
 	}
 	Accelerations[id.x] += pressureForce/density;
 }
@@ -331,9 +351,9 @@ void CalculateLaplacians (uint3 id : SV_DispatchThreadID)
 	float sqrRadius = smoothingRadius * smoothingRadius;
 
 	float3 velocity = PredictedVelocities[id.x];
-	float temperature = PredictedTemperaturesViscositiesConductivities[id.x][0];
-	float viscosity = PredictedTemperaturesViscositiesConductivities[id.x][1];
-	float conductivity = PredictedTemperaturesViscositiesConductivities[id.x][2];
+	float temperature = PredictedTemperaturesViscositiesConductivitiesCapacities[id.x][0];
+	float viscosity = PredictedTemperaturesViscositiesConductivitiesCapacities[id.x][1];
+	float conductivity = PredictedTemperaturesViscositiesConductivitiesCapacities[id.x][2];
 	float density = DensitiesPressures[id.x];
 
 	// Compute speed laplacian
@@ -370,7 +390,7 @@ void CalculateLaplacians (uint3 id : SV_DispatchThreadID)
 					uint neighbourIndex = indexData[0];
 
 					float3 neighbourPos = PredictedPositions[neighbourIndex];
-					float3 offsetToNeighbour = neighbourPos - (pos + currOffset*smoothingRadius);
+					float3 offsetToNeighbour = neighbourPos - (pos + currOffset*particleDimension);
 					float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
 
 					// Skip if not within radius
@@ -379,9 +399,9 @@ void CalculateLaplacians (uint3 id : SV_DispatchThreadID)
 					// Calculate viscosity
 					float dst = sqrt(sqrDstToNeighbour);
 
-					float neighbourTemperature = PredictedTemperaturesViscositiesConductivities[neighbourIndex][0];
-					float neighbourViscosity = PredictedTemperaturesViscositiesConductivities[neighbourIndex][1];
-					float neighbourConductivity = PredictedTemperaturesViscositiesConductivities[neighbourIndex][2];
+					float neighbourTemperature = PredictedTemperaturesViscositiesConductivitiesCapacities[neighbourIndex][0];
+					float neighbourViscosity = PredictedTemperaturesViscositiesConductivitiesCapacities[neighbourIndex][1];
+					float neighbourConductivity = PredictedTemperaturesViscositiesConductivitiesCapacities[neighbourIndex][2];
 					float3 neighbourVelocity = PredictedVelocities[neighbourIndex];
 					float neighbourDensity = DensitiesPressures[neighbourIndex][0];
 
@@ -397,13 +417,13 @@ void CalculateLaplacians (uint3 id : SV_DispatchThreadID)
 
 			}
 			float sharedConductivity = (density * conductivity + adjacentDensity * adjacentConductivity)/(density+adjacentDensity);
-			heatFlux += (adjacentTemperature-temperature) / smoothingRadius * sharedConductivity;
+			heatFlux += (adjacentTemperature-temperature) / (particleDimension * 4 * PI) * sharedConductivity;
 
 			velocityLaplacian += (adjacentVelocity-velocity);
 		}
 
 	}
-	Accelerations[id.x] += velocityLaplacian * viscosity / sqrRadius;
+	Accelerations[id.x] += velocityLaplacian * viscosity / (particleDimension*particleDimension) / density;
 
 	float3 offsetToThermostat = thermostatPosition - pos;
 	float sqrDstToThermostat = dot(offsetToThermostat, offsetToThermostat);
@@ -411,7 +431,7 @@ void CalculateLaplacians (uint3 id : SV_DispatchThreadID)
 	{
 		float dst=sqrt(sqrDstToThermostat);
 		float sharedConductivity = (density * conductivity + thermostatDensity * thermostatConductivity)/(density+thermostatDensity);
-		DeltaTemperatures[id.x] = (thermostatTemperature - temperature) / dst * sharedConductivity / density;
+		DeltaTemperatures[id.x] = (thermostatTemperature - temperature) / dst * sharedConductivity / density / deltaTime;
 		return;
 	}
 	DeltaTemperatures[id.x] += heatFlux / density;
