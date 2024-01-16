@@ -21,6 +21,7 @@ public class Spawner3D : MonoBehaviour
         float[] temperatures = new float[numPoints];
         float3[] predictedTemperaturesViscositiesConductivities = new float3[numPoints];
         float3[] zeros = new float3[numPoints];
+        float3[] vdwValues = new float3[numPoints];
 
         int i = 0;
 
@@ -45,12 +46,18 @@ public class Spawner3D : MonoBehaviour
                     float thermicConductivity = 1000f+tx*100f;
                     predictedTemperaturesViscositiesConductivities[i] = new float3(temperatures[i],viscosity,thermicConductivity);
                     zeros[i] = new float3(0,0,0);
+                    float p = 22120000f;
+                    float t = 374f;
+                    float R =  	8.3f;
+                    float a = 27 * R * R * t * t / (64 * p);
+                    float b = 8 * R * t / p;
+                    vdwValues[i] = new float3(0.018f, a, b);
                     i++;
                 }
             }
         }
 
-        return new SpawnData() { points = points, velocities = velocities, temperatures = temperatures, zeros=zeros, predictedTemperaturesViscositiesConductivities=predictedTemperaturesViscositiesConductivities };
+        return new SpawnData() { points = points, velocities = velocities, temperatures = temperatures, zeros=zeros, predictedTemperaturesViscositiesConductivities=predictedTemperaturesViscositiesConductivities, vdwValues=vdwValues};
     }
 
     public struct SpawnData
@@ -62,6 +69,7 @@ public class Spawner3D : MonoBehaviour
         public float[] viscosities;
         public float3[] zeros;
         public float3[] predictedTemperaturesViscositiesConductivities;
+        public float3[] vdwValues;
     }
 
     void OnValidate()

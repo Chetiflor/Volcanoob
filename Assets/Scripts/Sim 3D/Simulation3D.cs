@@ -20,6 +20,8 @@ public class Simulation3D : MonoBehaviour
     public float thermostatTemperature=1274;
     public float thermostatDensity=1000;
     public float thermostatConductivity=1000;
+    public float molesBym2 = 55000f;
+    public float molesByParticule;
 
     [Header("References")]
     public ComputeShader compute;
@@ -43,12 +45,13 @@ public class Simulation3D : MonoBehaviour
     public ComputeBuffer h4Buffer { get; private set; }
 
     public ComputeBuffer velocityBuffer { get; private set; }
-    public ComputeBuffer densityBuffer { get; private set; }
+    public ComputeBuffer densityPressureBuffer { get; private set; }
     public ComputeBuffer temperatureBuffer { get; private set; }
     public ComputeBuffer deltaTemperatureBuffer { get; private set; }
     public ComputeBuffer predictedPositionBuffer;
     public ComputeBuffer predictedVelocityBuffer;
     public ComputeBuffer predictedTemperatureViscosityConductivityBuffer;
+    public ComputeBuffer vdwValueBuffer; // van der walls equation: M(molar mass), a(cohesion term), b(molar covolume)
     ComputeBuffer spatialIndices;
     ComputeBuffer spatialOffsets;
 
@@ -56,8 +59,8 @@ public class Simulation3D : MonoBehaviour
     const int predictionKernel = 0;
     const int externalForcesKernel = 1;
     const int spatialHashKernel = 2;
-    const int densityKernel = 3;
-    const int pressureKernel = 4;
+    const int densityPressureKernel = 3;
+    const int pressureForcesKernel = 4;
     const int updatePositionKernel = 5;
     const int laplacianKernel = 6;
     const int updateTemperatureKernel = 7;
@@ -98,11 +101,12 @@ public class Simulation3D : MonoBehaviour
 
         temperatureBuffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles);
         deltaTemperatureBuffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles);
-        densityBuffer = ComputeHelper.CreateStructuredBuffer<float2>(numParticles);
+        densityPressureBuffer = ComputeHelper.CreateStructuredBuffer<float2>(numParticles);
         spatialIndices = ComputeHelper.CreateStructuredBuffer<uint3>(numParticles);
         spatialOffsets = ComputeHelper.CreateStructuredBuffer<uint>(numParticles);
         
         predictedTemperatureViscosityConductivityBuffer = ComputeHelper.CreateStructuredBuffer<float3>(numParticles);
+        vdwValueBuffer = ComputeHelper.CreateStructuredBuffer<float3>(numParticles);
 
  
         // Set buffer data
@@ -111,16 +115,17 @@ public class Simulation3D : MonoBehaviour
         // Init compute
         ComputeHelper.SetBuffer(compute, positionBuffer, "Positions", predictionKernel, updatePositionKernel);
         ComputeHelper.SetBuffer(compute, velocityBuffer, "Velocities", predictionKernel,  updatePositionKernel);
-        ComputeHelper.SetBuffer(compute, predictedPositionBuffer, "PredictedPositions", predictionKernel, spatialHashKernel, densityKernel, pressureKernel, laplacianKernel, updatePositionKernel);
-        ComputeHelper.SetBuffer(compute, predictedVelocityBuffer, "PredictedVelocities", predictionKernel, externalForcesKernel, pressureKernel, laplacianKernel, updatePositionKernel);
+        ComputeHelper.SetBuffer(compute, predictedPositionBuffer, "PredictedPositions", predictionKernel, spatialHashKernel, densityPressureKernel, pressureForcesKernel, laplacianKernel, updatePositionKernel);
+        ComputeHelper.SetBuffer(compute, predictedVelocityBuffer, "PredictedVelocities", predictionKernel, externalForcesKernel, pressureForcesKernel, laplacianKernel, updatePositionKernel);
 
-        ComputeHelper.SetBuffer(compute, spatialIndices, "SpatialIndices", spatialHashKernel, densityKernel, pressureKernel, laplacianKernel);
-        ComputeHelper.SetBuffer(compute, spatialOffsets, "SpatialOffsets", spatialHashKernel, densityKernel, pressureKernel, laplacianKernel);
+        ComputeHelper.SetBuffer(compute, spatialIndices, "SpatialIndices", spatialHashKernel, densityPressureKernel, pressureForcesKernel, laplacianKernel);
+        ComputeHelper.SetBuffer(compute, spatialOffsets, "SpatialOffsets", spatialHashKernel, densityPressureKernel, pressureForcesKernel, laplacianKernel);
 
-        ComputeHelper.SetBuffer(compute, densityBuffer, "Densities", externalForcesKernel, densityKernel, pressureKernel, laplacianKernel);
+        ComputeHelper.SetBuffer(compute, densityPressureBuffer, "DensitiesPressures", externalForcesKernel, densityPressureKernel, pressureForcesKernel, laplacianKernel);
+        ComputeHelper.SetBuffer(compute, vdwValueBuffer, "VDWValues", densityPressureKernel, pressureForcesKernel);
 
         ComputeHelper.SetBuffer(compute, temperatureBuffer, "Temperatures", updateTemperatureKernel,predictionKernel);
-        ComputeHelper.SetBuffer(compute, predictedTemperatureViscosityConductivityBuffer, "PredictedTemperaturesViscositiesConductivitiesBuffer", laplacianKernel,predictionKernel);
+        ComputeHelper.SetBuffer(compute, predictedTemperatureViscosityConductivityBuffer, "PredictedTemperaturesViscositiesConductivities", laplacianKernel,predictionKernel);
 
         ComputeHelper.SetBuffer(compute, k1Buffer, "k1", updatePositionKernel);
         ComputeHelper.SetBuffer(compute, k2Buffer, "k2", updatePositionKernel);
@@ -190,45 +195,45 @@ public class Simulation3D : MonoBehaviour
     void RunSimulationStep(float deltaTime)
     {
         compute.SetFloat("deltaTime", deltaTime/2);
-        ComputeHelper.SetBuffer(compute, k1Buffer, "Accelerations", externalForcesKernel, pressureKernel, laplacianKernel, predictionKernel);
+        ComputeHelper.SetBuffer(compute, k1Buffer, "Accelerations", externalForcesKernel, pressureForcesKernel, laplacianKernel, predictionKernel);
         ComputeHelper.SetBuffer(compute, h1Buffer, "DeltaTemperatures", laplacianKernel, predictionKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: spatialHashKernel);
         gpuSort.SortAndCalculateOffsets();
-        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: densityKernel);
+        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: densityPressureKernel);
 
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: externalForcesKernel);
-        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: pressureKernel);
+        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: pressureForcesKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: laplacianKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: predictionKernel);
 
-        ComputeHelper.SetBuffer(compute, k2Buffer, "Accelerations", externalForcesKernel, pressureKernel, laplacianKernel, predictionKernel);
+        ComputeHelper.SetBuffer(compute, k2Buffer, "Accelerations", externalForcesKernel, pressureForcesKernel, laplacianKernel, predictionKernel);
         ComputeHelper.SetBuffer(compute, h2Buffer, "DeltaTemperatures", laplacianKernel, predictionKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: spatialHashKernel);
         gpuSort.SortAndCalculateOffsets();
-        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: densityKernel);
+        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: densityPressureKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: externalForcesKernel);
-        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: pressureKernel);
+        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: pressureForcesKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: laplacianKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: predictionKernel);
 
         compute.SetFloat("deltaTime", deltaTime);
-        ComputeHelper.SetBuffer(compute, k3Buffer, "Accelerations", externalForcesKernel, pressureKernel, laplacianKernel, predictionKernel);
+        ComputeHelper.SetBuffer(compute, k3Buffer, "Accelerations", externalForcesKernel, pressureForcesKernel, laplacianKernel, predictionKernel);
         ComputeHelper.SetBuffer(compute, h3Buffer, "DeltaTemperatures", laplacianKernel, predictionKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: spatialHashKernel);
         gpuSort.SortAndCalculateOffsets();
-        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: densityKernel);
+        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: densityPressureKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: externalForcesKernel);
-        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: pressureKernel);
+        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: pressureForcesKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: laplacianKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: predictionKernel);
         
-        ComputeHelper.SetBuffer(compute, k4Buffer, "Accelerations", externalForcesKernel, pressureKernel, laplacianKernel, predictionKernel);
+        ComputeHelper.SetBuffer(compute, k4Buffer, "Accelerations", externalForcesKernel, pressureForcesKernel, laplacianKernel, predictionKernel);
         ComputeHelper.SetBuffer(compute, h4Buffer, "DeltaTemperatures", laplacianKernel, predictionKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: spatialHashKernel);
         gpuSort.SortAndCalculateOffsets();
-        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: densityKernel);
+        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: densityPressureKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: externalForcesKernel);
-        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: pressureKernel);
+        ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: pressureForcesKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: laplacianKernel);
 
         ComputeHelper.SetBuffer(compute, k1Buffer, "k1", updatePositionKernel);
@@ -249,6 +254,8 @@ public class Simulation3D : MonoBehaviour
         compute.SetFloat("gravity", gravity);
         compute.SetFloat("collisionDamping", collisionDamping);
         compute.SetFloat("smoothingRadius", smoothingRadius);
+        compute.SetFloat("molesBym2", molesBym2);
+        molesByParticule = molesBym2*smoothingRadius*smoothingRadius*smoothingRadius/1000000;
         compute.SetFloat("targetDensity", targetDensity);
         compute.SetFloat("pressureMultiplier", pressureMultiplier);
         compute.SetFloat("nearPressureMultiplier", nearPressureMultiplier);
@@ -275,6 +282,7 @@ public class Simulation3D : MonoBehaviour
         predictedVelocityBuffer.SetData(spawnData.velocities);
         temperatureBuffer.SetData(spawnData.temperatures);
         predictedTemperatureViscosityConductivityBuffer.SetData(spawnData.predictedTemperaturesViscositiesConductivities);
+        vdwValueBuffer.SetData(spawnData.vdwValues);
     }
 
     void HandleInput()
@@ -299,7 +307,7 @@ public class Simulation3D : MonoBehaviour
 
     void OnDestroy()
     {
-        ComputeHelper.Release(positionBuffer, predictedPositionBuffer, velocityBuffer, predictedVelocityBuffer, densityBuffer, k1Buffer, k2Buffer, k3Buffer, k4Buffer, temperatureBuffer, deltaTemperatureBuffer, spatialIndices, spatialOffsets); 
+        ComputeHelper.Release(positionBuffer, predictedPositionBuffer, velocityBuffer, predictedVelocityBuffer, densityPressureBuffer, k1Buffer, k2Buffer, k3Buffer, k4Buffer, temperatureBuffer, deltaTemperatureBuffer, spatialIndices, spatialOffsets); 
     }
 
     void OnDrawGizmos()
