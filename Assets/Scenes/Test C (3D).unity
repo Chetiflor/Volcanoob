@@ -266,9 +266,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c8b3b79f98be3f34e8fefade4cef2ade, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  timeScale: 0.2
+  timeScale: 0.01
   fixedTimeStep: 0
-  iterationsPerFrame: 3
+  iterationsPerFrame: 1
   gravity: -10
   collisionDamping: 0.95
   smoothingRadius: 0.2
@@ -280,6 +280,7 @@ MonoBehaviour:
   thermostatTemperature: 1273
   thermostatDensity: 1000
   thermostatConductivity: 1000
+  molesBym3: 55000
   compute: {fileID: 7200000, guid: 9443696acfd0ebe4fb503b56d952256c, type: 3}
   spawner: {fileID: 271053323}
   display: {fileID: 271053320}

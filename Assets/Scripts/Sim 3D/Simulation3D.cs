@@ -5,13 +5,16 @@ public class Simulation3D : MonoBehaviour
 {
     public event System.Action SimulationStepCompleted;
 
+
+    const float R = 8.3f;
+
     [Header("Settings")]
     public float timeScale = 1;
     public bool fixedTimeStep;
     public int iterationsPerFrame;
     public float gravity = -10;
     [Range(0, 1)] public float collisionDamping = 0.05f;
-    public float smoothingRadius = 0.2f;
+    public float smoothingRadius = 0.002f;
     public float targetDensity;
     public float pressureMultiplier;
     public float nearPressureMultiplier;
@@ -20,8 +23,8 @@ public class Simulation3D : MonoBehaviour
     public float thermostatTemperature=1274;
     public float thermostatDensity=1000;
     public float thermostatConductivity=1000;
-    public float molesBym2 = 55000f;
-    public float molesByParticule;
+    public float molesBym3 = 55000;
+    float molesByParticule;
 
     [Header("References")]
     public ComputeShader compute;
@@ -101,7 +104,7 @@ public class Simulation3D : MonoBehaviour
 
         temperatureBuffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles);
         deltaTemperatureBuffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles);
-        densityPressureBuffer = ComputeHelper.CreateStructuredBuffer<float2>(numParticles);
+        densityPressureBuffer = ComputeHelper.CreateStructuredBuffer<float4>(numParticles);
         spatialIndices = ComputeHelper.CreateStructuredBuffer<uint3>(numParticles);
         spatialOffsets = ComputeHelper.CreateStructuredBuffer<uint>(numParticles);
         
@@ -125,7 +128,7 @@ public class Simulation3D : MonoBehaviour
         ComputeHelper.SetBuffer(compute, vdwValueBuffer, "VDWValues", densityPressureKernel, pressureForcesKernel);
 
         ComputeHelper.SetBuffer(compute, temperatureBuffer, "Temperatures", updateTemperatureKernel,predictionKernel);
-        ComputeHelper.SetBuffer(compute, predictedTemperatureViscosityConductivityBuffer, "PredictedTemperaturesViscositiesConductivities", laplacianKernel,predictionKernel);
+        ComputeHelper.SetBuffer(compute, predictedTemperatureViscosityConductivityBuffer, "PredictedTemperaturesViscositiesConductivities", densityPressureKernel, laplacianKernel,predictionKernel);
 
         ComputeHelper.SetBuffer(compute, k1Buffer, "k1", updatePositionKernel);
         ComputeHelper.SetBuffer(compute, k2Buffer, "k2", updatePositionKernel);
@@ -138,6 +141,7 @@ public class Simulation3D : MonoBehaviour
         ComputeHelper.SetBuffer(compute, h4Buffer, "h4", updateTemperatureKernel);
 
         compute.SetInt("numParticles", positionBuffer.count);
+        compute.SetFloat("R", R);
 
         gpuSort = new();
         gpuSort.SetBuffers(spatialIndices, spatialOffsets);
@@ -236,11 +240,6 @@ public class Simulation3D : MonoBehaviour
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: pressureForcesKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: laplacianKernel);
 
-        ComputeHelper.SetBuffer(compute, k1Buffer, "k1", updatePositionKernel);
-        ComputeHelper.SetBuffer(compute, k2Buffer, "k2", updatePositionKernel);
-        ComputeHelper.SetBuffer(compute, k3Buffer, "k3", updatePositionKernel);
-        ComputeHelper.SetBuffer(compute, k4Buffer, "k4", updatePositionKernel);
-
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: updatePositionKernel);
         ComputeHelper.Dispatch(compute, positionBuffer.count, kernelIndex: updateTemperatureKernel);
 
@@ -254,8 +253,8 @@ public class Simulation3D : MonoBehaviour
         compute.SetFloat("gravity", gravity);
         compute.SetFloat("collisionDamping", collisionDamping);
         compute.SetFloat("smoothingRadius", smoothingRadius);
-        compute.SetFloat("molesBym2", molesBym2);
-        molesByParticule = molesBym2*smoothingRadius*smoothingRadius*smoothingRadius/1000000;
+        molesByParticule = molesBym3*smoothingRadius*smoothingRadius*smoothingRadius/1000000;
+        compute.SetFloat("molesByParticule", molesByParticule);
         compute.SetFloat("targetDensity", targetDensity);
         compute.SetFloat("pressureMultiplier", pressureMultiplier);
         compute.SetFloat("nearPressureMultiplier", nearPressureMultiplier);
