@@ -25,7 +25,8 @@ public class ParticleDisplay3D : MonoBehaviour
     {
         mat = new Material(shader);
         mat.SetBuffer("PositionsVelocities", sim.positionVelocityBuffer);
-        mat.SetBuffer("TemperaturesViscositiesConductivitiesCapacities", sim.predictedTemperatureViscosityConductivityCapacityBuffer);
+        mat.SetBuffer("Temperatures", sim.temperatureBuffer);
+        mat.SetBuffer("StateVariables", sim.stateVariableBuffer);
 
         mesh = SebStuff.SphereGenerator.GenerateSphereMesh(meshResolution);
         debug_MeshTriCount = mesh.triangles.Length / 3;

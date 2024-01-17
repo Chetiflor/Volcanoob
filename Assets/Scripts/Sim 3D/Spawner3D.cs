@@ -9,7 +9,9 @@ public class Spawner3D : MonoBehaviour
     public float3 initialVel;
     public float jitterStrength;
     public bool showSpawnBounds;
-    const float R = 8.3f;
+    public float R;
+    public int stateVariablesStride;
+    public int constantsStride;
 
     [Header("Info")]
     public int debug_numParticles;
@@ -17,15 +19,11 @@ public class Spawner3D : MonoBehaviour
     public SpawnData GetSpawnData()
     {
         int numPoints = numParticlesPerAxis * numParticlesPerAxis * numParticlesPerAxis;
-        float3[] points = new float3[numPoints];
-        float3[] velocities = new float3[numPoints];
-        float3[] positionsVelocities =new float3[2*numPoints];
 
+        float3[] positionsVelocities =new float3[2*numPoints];
         float[] temperatures = new float[numPoints];
-        float4[] predictedTemperaturesViscositiesConductivitiesCapacities = new float4[numPoints];
-        float3[] accelerations = new float3[numPoints*4];
-        int constantCount = 3;
-        float[] constants = new float[numPoints*constantCount];
+        float[] stateVariables = new float[numPoints * stateVariablesStride];
+        float[] constants = new float[numPoints * constantsStride];
 
         int i = 0;
 
@@ -42,47 +40,46 @@ public class Spawner3D : MonoBehaviour
                     float px = (tx - 0.5f) * size + centre.x;
                     float py = (ty - 0.5f) * size + centre.y;
                     float pz = (tz - 0.5f) * size + centre.z;
-                    float3 jitter = UnityEngine.Random.insideUnitSphere * jitterStrength;
-                    points[i] = new float3(px, py, pz) + jitter;
-                    velocities[i] = initialVel;
 
+                    float3 jitter = UnityEngine.Random.insideUnitSphere * jitterStrength;
                     positionsVelocities[2*i] = new float3(px, py, pz) + jitter;
                     positionsVelocities[2*i+1] = initialVel;
 
-                    float viscosity = 0.0f;
                     temperatures[i] = 273+1000*ty;
-                    float thermicConductivity = 1000f+tx*100f;
-                    float thermicCapacity = 4.184f;
-                    predictedTemperaturesViscositiesConductivitiesCapacities[i] = new float4(temperatures[i],viscosity,thermicConductivity,thermicCapacity);
 
                     // water
+
+                    float viscosity = 0.0f;
+                    float thermicConductivity = 598f;
+                    float thermicCapacity = 4185f;
+
+                    stateVariables[stateVariablesStride * i + 0] = 0;
+                    stateVariables[stateVariablesStride * i + 1] = 0;
+                    stateVariables[stateVariablesStride * i + 2] = viscosity;
+                    stateVariables[stateVariablesStride * i + 3] = thermicConductivity;
+                    stateVariables[stateVariablesStride * i + 4] = thermicCapacity;
                     float M = 0.018f;
                     float p = 22120000f;
                     float t = 374f;
 
                     float a = 27 * R * R * t * t / (64 * p);
                     float b = 8 * R * t / p;
-                    constants[constantCount*i+0]=M;
-                    constants[constantCount*i+1]=a;
-                    constants[constantCount*i+2]=b;
+                    constants[constantsStride * i + 0] = M;
+                    constants[constantsStride * i + 1] = a;
+                    constants[constantsStride * i + 2] = b;
                     i++;
                 }
             }
         }
 
-        return new SpawnData() { points = points, velocities = velocities, positionsVelocities=positionsVelocities, temperatures = temperatures, predictedTemperaturesViscositiesConductivitiesCapacities=predictedTemperaturesViscositiesConductivitiesCapacities, constants=constants};
+        return new SpawnData() {  positionsVelocities = positionsVelocities, temperatures = temperatures, stateVariables = stateVariables, constants = constants};
     }
 
     public struct SpawnData
     {
-        public float3[] points;
-        public float3[] velocities;
         public float3[] positionsVelocities;
         public float[] temperatures;
-        public float[] thermicConductivities;
-        public float[] viscosities;
-        public float3[] partialAccelerations;
-        public float4[] predictedTemperaturesViscositiesConductivitiesCapacities;
+        public float[] stateVariables;
         public float[] constants;
     }
 
