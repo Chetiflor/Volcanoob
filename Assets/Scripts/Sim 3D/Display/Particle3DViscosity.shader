@@ -24,7 +24,7 @@ Shader "Custom/Particle3DViscosity"
 
 
 		#ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
-			StructuredBuffer<float3> Positions;
+			StructuredBuffer<float3> PositionsVelocities;
 			StructuredBuffer<float4> TemperaturesViscositiesConductivitiesCapacities;
 		#endif
 
@@ -50,7 +50,7 @@ Shader "Custom/Particle3DViscosity"
 			void setup()
 			{
 			#ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
-				float3 pos = Positions[unity_InstanceID];
+				float3 pos = PositionsVelocities[2*unity_InstanceID];
 
 				unity_ObjectToWorld._11_21_31_41 = float4(scale, 0, 0, 0);
 				unity_ObjectToWorld._12_22_32_42 = float4(0, scale, 0, 0);

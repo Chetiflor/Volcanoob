@@ -16,8 +16,7 @@ Shader "Instanced/Particle3D" {
 
 			#include "UnityCG.cginc"
 			
-			StructuredBuffer<float3> Positions;
-			StructuredBuffer<float3> Velocities;
+			StructuredBuffer<float3> PositionsVelocities;
 			Texture2D<float4> ColourMap;
 			SamplerState linear_clamp_sampler;
 			float velocityMax;
@@ -38,7 +37,7 @@ Shader "Instanced/Particle3D" {
 			v2f vert (appdata_full v, uint instanceID : SV_InstanceID)
 			{
 				
-				float3 centreWorld = Positions[instanceID];
+				float3 centreWorld = PositionsVelocities[2*instanceID+1];
 				float3 worldVertPos = centreWorld + mul(unity_ObjectToWorld, v.vertex * scale);
 				float3 objectVertPos = mul(unity_WorldToObject, float4(worldVertPos.xyz, 1));
 				v2f o;
@@ -47,7 +46,7 @@ Shader "Instanced/Particle3D" {
 
 				o.pos = UnityObjectToClipPos(objectVertPos);
 
-				float speed = length(Velocities[instanceID]);
+				float speed = length(PositionsVelocities[2*instanceID+1]);
 				float speedT = saturate(speed / velocityMax);
 				float colT = speedT;
 				o.colour = ColourMap.SampleLevel(linear_clamp_sampler, float2(colT, 0.5), 0);
