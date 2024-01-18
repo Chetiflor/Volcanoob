@@ -266,20 +266,20 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c8b3b79f98be3f34e8fefade4cef2ade, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  timeScale: 0.1
+  timeScale: 0.3
   fixedTimeStep: 0
   iterationsPerFrame: 3
   gravity: -10
   collisionDamping: 0.95
   smoothingRadius: 0.2
   particleDimension: 0.002
-  targetDensity: 630
+  targetDensity: 630000
   pressureMultiplier: 288
   nearPressureMultiplier: 2.25
   viscosityStrength: 0.001
   thermostatPosition: {x: 0, y: -3, z: 0}
   thermostatTemperature: 1273
-  thermostatDensity: 1000
+  thermostatInfluenceRadius: 0.5
   thermostatConductivity: 1000
   molesBym3: 55000
   athmospherePressure: 100000
@@ -367,6 +367,9 @@ MonoBehaviour:
     z: 0
   jitterStrength: 0.035
   showSpawnBounds: 1
+  R: 0
+  stateVariablesStride: 0
+  molesByParticle: 0
   debug_numParticles: 15625
 --- !u!1 &620375867
 GameObject:

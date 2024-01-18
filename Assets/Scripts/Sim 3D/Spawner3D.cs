@@ -11,7 +11,7 @@ public class Spawner3D : MonoBehaviour
     public bool showSpawnBounds;
     public float R;
     public int stateVariablesStride;
-    public int constantsStride;
+    public float molesByParticle;
 
     [Header("Info")]
     public int debug_numParticles;
@@ -23,7 +23,6 @@ public class Spawner3D : MonoBehaviour
         float3[] positionsVelocities =new float3[2*numPoints];
         float[] temperatures = new float[numPoints];
         float[] stateVariables = new float[numPoints * stateVariablesStride];
-        float[] constants = new float[numPoints * constantsStride];
 
         int i = 0;
 
@@ -49,30 +48,30 @@ public class Spawner3D : MonoBehaviour
 
                     // water
 
-                    float viscosity = 0.0f;
+                    float viscosity = 7*tz;
                     float thermicConductivity = 598f;
                     float thermicCapacity = 4185f;
+                    float M = 0.018f;
+                    float pCritic = 22120000f;
+                    float tCritic = 374f;
+
+                    float a = 27 * R * R * tCritic * tCritic / (64 * pCritic);
+                    float b = 8 * R * tCritic / pCritic;
 
                     stateVariables[stateVariablesStride * i + 0] = 0;
                     stateVariables[stateVariablesStride * i + 1] = 0;
                     stateVariables[stateVariablesStride * i + 2] = viscosity;
                     stateVariables[stateVariablesStride * i + 3] = thermicConductivity;
                     stateVariables[stateVariablesStride * i + 4] = thermicCapacity;
-                    float M = 0.018f;
-                    float p = 22120000f;
-                    float t = 374f;
-
-                    float a = 27 * R * R * t * t / (64 * p);
-                    float b = 8 * R * t / p;
-                    constants[constantsStride * i + 0] = M;
-                    constants[constantsStride * i + 1] = a;
-                    constants[constantsStride * i + 2] = b;
+                    stateVariables[stateVariablesStride * i + 5] = M*molesByParticle;
+                    stateVariables[stateVariablesStride * i + 6] = a;
+                    stateVariables[stateVariablesStride * i + 7] = b;
                     i++;
                 }
             }
         }
 
-        return new SpawnData() {  positionsVelocities = positionsVelocities, temperatures = temperatures, stateVariables = stateVariables, constants = constants};
+        return new SpawnData() {  positionsVelocities = positionsVelocities, temperatures = temperatures, stateVariables = stateVariables};
     }
 
     public struct SpawnData
@@ -80,7 +79,6 @@ public class Spawner3D : MonoBehaviour
         public float3[] positionsVelocities;
         public float[] temperatures;
         public float[] stateVariables;
-        public float[] constants;
     }
 
     void OnValidate()
