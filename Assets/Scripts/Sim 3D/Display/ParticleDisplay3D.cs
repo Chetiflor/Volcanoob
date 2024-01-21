@@ -24,13 +24,13 @@ public class ParticleDisplay3D : MonoBehaviour
     public void Init(Simulation3D sim)
     {
         mat = new Material(shader);
-        mat.SetBuffer("Positions", sim.positionBuffer);
-        mat.SetBuffer("Velocities", sim.velocityBuffer);
-        mat.SetBuffer("TemperaturesViscositiesConductivities", sim.predictedTemperatureViscosityConductivityBuffer);
+        mat.SetBuffer("PositionsVelocities", sim.positionVelocityBuffer);
+        mat.SetBuffer("Temperatures", sim.temperatureBuffer);
+        mat.SetBuffer("StateVariables", sim.stateVariableBuffer);
 
         mesh = SebStuff.SphereGenerator.GenerateSphereMesh(meshResolution);
         debug_MeshTriCount = mesh.triangles.Length / 3;
-        argsBuffer = ComputeHelper.CreateArgsBuffer(mesh, sim.positionBuffer.count);
+        argsBuffer = ComputeHelper.CreateArgsBuffer(mesh, sim.positionVelocityBuffer.count/2);
         bounds = new Bounds(Vector3.zero, Vector3.one * 10000);
     }
 

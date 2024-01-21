@@ -24,8 +24,8 @@ Shader "Custom/Particle3DViscosity"
 
 
 		#ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
-			StructuredBuffer<float3> Positions;
-			StructuredBuffer<float3> TemperaturesViscositiesConductivities;
+			StructuredBuffer<float3> PositionsVelocities;
+			StructuredBuffer<float4> StateVariables;
 		#endif
 
 
@@ -43,14 +43,14 @@ Shader "Custom/Particle3DViscosity"
 				o.uv_MainTex = v.texcoord.xy;
 
 	#ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
-				o.colour = tex2Dlod(ColourMap, float4(TemperaturesViscositiesConductivities[unity_InstanceID][1], 0.5,0,0));
+				o.colour = tex2Dlod(ColourMap, float4(StateVariables[unity_InstanceID][2], 0.5,0,0));
 	#endif
 			}
 
 			void setup()
 			{
 			#ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
-				float3 pos = Positions[unity_InstanceID];
+				float3 pos = PositionsVelocities[2*unity_InstanceID];
 
 				unity_ObjectToWorld._11_21_31_41 = float4(scale, 0, 0, 0);
 				unity_ObjectToWorld._12_22_32_42 = float4(0, scale, 0, 0);
