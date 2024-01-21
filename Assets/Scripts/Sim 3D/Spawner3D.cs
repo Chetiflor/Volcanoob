@@ -48,10 +48,13 @@ public class Spawner3D : MonoBehaviour
 
                     // water
 
-                    float viscosity = 7*tz;
-                    float thermicConductivity = 598f;
-                    float thermicCapacity = 4185f;
-                    float M = 0.018f;
+                    float viscosity = 0f;
+                    float thermicConductivity = 1000000f;
+                    float thermicCapacity = 0.4185f;
+                    float molarMass = 0.018f; // molar mass
+                    float molarVolume = 55555;
+                    float volumicMass = 1000;
+                    float n = molarMass*molesByParticle; // matter quantity
                     float pCritic = 22120000f;
                     float tCritic = 374f;
 
@@ -63,9 +66,10 @@ public class Spawner3D : MonoBehaviour
                     stateVariables[stateVariablesStride * i + 2] = viscosity;
                     stateVariables[stateVariablesStride * i + 3] = thermicConductivity;
                     stateVariables[stateVariablesStride * i + 4] = thermicCapacity;
-                    stateVariables[stateVariablesStride * i + 5] = M*molesByParticle;
+                    stateVariables[stateVariablesStride * i + 5] = volumicMass;
                     stateVariables[stateVariablesStride * i + 6] = a;
                     stateVariables[stateVariablesStride * i + 7] = b;
+                    stateVariables[stateVariablesStride * i + 8] = molarMass;
                     i++;
                 }
             }
