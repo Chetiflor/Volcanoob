@@ -8,10 +8,12 @@
 #pragma kernel UpdateSpatial
 #pragma kernel UpdateTemperature
 #pragma kernel CalculateDeltasTemperature
+#pragma kernel MarchingCubes
 
 // Includes
 #include "./FluidMaths3D.hlsl"
 #include "./SpatialHash3D.hlsl"
+#include "./MarchingCubes.hlsl"
 
 static const int NumThreads = 64;
 
@@ -36,6 +38,15 @@ RWStructuredBuffer<float> StateVariables;
 const uint stateVariablesStride;
 RWStructuredBuffer<float> Constants;
 const uint constantsStride;
+
+const int dimX;
+const int dimY;
+const int dimZ;
+const float isoDensity;
+RWStructuredBuffer<float3> GridVertices;
+RWStructuredBuffer<float2> GridValues; // density, temperature
+RWStructuredBuffer<float4> CubesTrianglesVerticesTemperatures;
+RWStructuredBuffer<int> TriangleCounts;
 
 // Settings
 const uint RK4step;
@@ -532,7 +543,7 @@ void CalculateDeltasTemperature(uint3 id : SV_DispatchThreadID)
 
 			float densityNeighbour = Densities[neighbourIndex][0];
 			float temperatureNeighour = PredictedTemperatures[neighbourIndex];
-			float neighbourVolumicMass = StateVariables[id.x * stateVariablesStride + 5];
+			float neighbourVolumicMass = StateVariables[neighbourIndex * stateVariablesStride + 5];
 
 			gradientTemperature +=  (temperatureNeighour - temperature) * DensityKernel(dst, longRadius) * neighbourVolumicMass / (dst * densityNeighbour); //normalize by neighbour density
 			foundNeighbourInCell=true;
@@ -550,5 +561,144 @@ void CalculateDeltasTemperature(uint3 id : SV_DispatchThreadID)
 	float conductivity = StateVariables[tmpIndex+3];
 	float capacity = StateVariables[tmpIndex+4];
 	RK4TemperatureDerivative[4*id.x+RK4step] = gradientTemperature * conductivity / (density * capacity) * deltaTime;
+
+}
+
+
+[numthreads(NumThreads, 1, 1)]
+void EvaluateGrid(uint3 id : SV_DispatchThreadID)
+{
+	float3 pos = GridVertices[id.x];
+	int3 originCell = GetCell3D(pos, smoothingRadius);
+	float sqrRadius = smoothingRadius * smoothingRadius;
+
+	float density = 0;
+	float temperature = 0;
+
+	for (int i = 0; i < 27; i ++)
+	{
+		uint hash = HashCell3D(originCell + offsets3D[i]);
+		uint key = KeyFromHash(hash, numParticles);
+		uint currIndex = SpatialOffsets[key];
+		bool foundNeighbourInCell = false;
+
+		while (currIndex < numParticles)
+		{
+			uint3 indexData = SpatialIndices[currIndex];
+			currIndex ++;
+			// Exit if no longer looking at correct bin
+			if (indexData[2] != key) break;
+			// Skip if hash does not match
+			if (indexData[1] != hash) continue;
+
+			uint neighbourIndex = indexData[0];
+			// Skip if looking at self
+			if (neighbourIndex == id.x) continue;
+
+			float3 neighbourPos = PredictedPositionsVelocities[2*neighbourIndex];
+			float3 offsetToNeighbour = neighbourPos - pos;
+			float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
+
+			// Skip if not within radius
+			if (sqrDstToNeighbour > sqrRadius) continue;
+
+			float dst = max(sqrt(sqrDstToNeighbour),0.1);
+
+			float densityNeighbour = Densities[neighbourIndex][0];
+			float temperatureNeighour = PredictedTemperatures[neighbourIndex];
+			float neighbourVolumicMass = StateVariables[neighbourIndex * stateVariablesStride + 5];
+
+			float tmp = DensityKernel(dst, smoothingRadius) * neighbourVolumicMass / (dst * densityNeighbour); 
+			density += tmp * densityNeighbour;
+			temperature += tmp * temperatureNeighour;
+
+		}
+		
+	}
+
+	GridValues[id.x] = float2(density,temperature);
+}
+
+
+[numthreads(NumThreads, 1, 1)]
+void MarchingCubes(uint3 id : SV_DispatchThreadID)
+{
+
+	if(id.x%dimX == dimX - 1 || id.x%dimY == dimY - 1 || id.x%dimZ == dimZ - 1) return;
+
+	float cubeSize = smoothingRadius;
+	int x = id.x % dimX;
+	int y = (id.x / dimX) % dimY;
+	int z = (id.x / (dimX * dimY)) % dimZ;
+
+	int deltaX = 1;
+	int deltaY = dimX;
+	int deltaZ = dimX * dimY;
+
+	float2 gridValues[8];
+	float3 gridVertices[8];
+	float4 gridVerticesTemperatures[8];
+
+	gridValues[0] = GridValues[id.x];
+	gridValues[1] = GridValues[id.x + deltaX];
+	gridValues[2] = GridValues[id.x + deltaX + deltaY];
+	gridValues[3] = GridValues[id.x + deltaY];
+	gridValues[4] = GridValues[id.x + deltaZ];
+	gridValues[5] = GridValues[id.x + deltaX + deltaZ];
+	gridValues[6] = GridValues[id.x + deltaX + deltaY + deltaZ];
+	gridValues[7] = GridValues[id.x + deltaY + deltaZ];
+
+	gridVertices[0] = GridVertices[id.x];
+	gridVertices[1] = GridVertices[id.x + deltaX];
+	gridVertices[2] = GridVertices[id.x + deltaX + deltaY];
+	gridVertices[3] = GridVertices[id.x + deltaY];
+	gridVertices[4] = GridVertices[id.x + deltaZ];
+	gridVertices[5] = GridVertices[id.x + deltaX + deltaZ];
+	gridVertices[6] = GridVertices[id.x + deltaX + deltaY + deltaZ];
+	gridVertices[7] = GridVertices[id.x + deltaY + deltaZ];
+
+	for (int i = 0; i<8; i++)
+	{
+		gridVerticesTemperatures[i] = float4(gridVertices[i],gridValues[i].y);
+	}
+
+	
+	int cubeIndex = 0;
+	if (gridValues[0].x > isoDensity) cubeIndex |= 1;
+	if (gridValues[1].x > isoDensity) cubeIndex |= 2;
+	if (gridValues[2].x > isoDensity) cubeIndex |= 4;
+	if (gridValues[3].x > isoDensity) cubeIndex |= 8;
+	if (gridValues[4].x > isoDensity) cubeIndex |= 16;
+	if (gridValues[5].x > isoDensity) cubeIndex |= 32;
+	if (gridValues[6].x > isoDensity) cubeIndex |= 64;
+	if (gridValues[7].x > isoDensity) cubeIndex |= 128;
+
+	int edgeMask = edgeTable[cubeIndex];
+	float4 vertList[12];
+	TriangleCounts[id.x] = 0;
+	if (edgeMask == 0) return;
+	if ((edgeMask & 1) > 0) vertList[0] =     interpolate(gridVerticesTemperatures[0],gridVerticesTemperatures[1],gridValues[0],gridValues[1]);
+	if ((edgeMask & 2) > 0) vertList[1] =     interpolate(gridVerticesTemperatures[1],gridVerticesTemperatures[2],gridValues[1],gridValues[2]);
+	if ((edgeMask & 4) > 0) vertList[2] =     interpolate(gridVerticesTemperatures[2],gridVerticesTemperatures[3],gridValues[2],gridValues[3]);
+	if ((edgeMask & 8) > 0) vertList[3] =     interpolate(gridVerticesTemperatures[3],gridVerticesTemperatures[0],gridValues[3],gridValues[0]);
+	if ((edgeMask & 16) > 0) vertList[4] =    interpolate(gridVerticesTemperatures[4],gridVerticesTemperatures[5],gridValues[4],gridValues[5]);
+	if ((edgeMask & 32) > 0) vertList[5] =    interpolate(gridVerticesTemperatures[5],gridVerticesTemperatures[6],gridValues[5],gridValues[6]);
+	if ((edgeMask & 64) > 0) vertList[6] =    interpolate(gridVerticesTemperatures[6],gridVerticesTemperatures[7],gridValues[6],gridValues[7]);
+	if ((edgeMask & 128) > 0) vertList[7] =   interpolate(gridVerticesTemperatures[7],gridVerticesTemperatures[4],gridValues[7],gridValues[4]);
+	if ((edgeMask & 256) > 0) vertList[8] =   interpolate(gridVerticesTemperatures[0],gridVerticesTemperatures[4],gridValues[0],gridValues[4]);
+	if ((edgeMask & 512) > 0) vertList[9] =   interpolate(gridVerticesTemperatures[1],gridVerticesTemperatures[5],gridValues[1],gridValues[5]);
+	if ((edgeMask & 1024) > 0) vertList[10] = interpolate(gridVerticesTemperatures[2],gridVerticesTemperatures[6],gridValues[2],gridValues[6]);
+	if ((edgeMask & 2048) > 0) vertList[11] = interpolate(gridVerticesTemperatures[3],gridVerticesTemperatures[7],gridValues[3],gridValues[7]);
+	
+	int count = 0;
+	for (int i = 0; triangleTable[cubeIndex][i] != -1; i += 3)
+	{
+		int tmpIndex = 15*id.x+i*6;
+		CubesTrianglesVerticesTemperatures[tmpIndex + 0] = vertList[triangleTable[cubeIndex][i + 0]];
+		CubesTrianglesVerticesTemperatures[tmpIndex + 1] = vertList[triangleTable[cubeIndex][i + 1]];
+		CubesTrianglesVerticesTemperatures[tmpIndex + 2] = vertList[triangleTable[cubeIndex][i + 2]];
+		count++;
+	}
+	TriangleCounts[id.x] = count;
 
 }

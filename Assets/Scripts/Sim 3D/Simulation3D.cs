@@ -32,6 +32,8 @@ public class Simulation3D : MonoBehaviour
     public float airDensity = 1.3f;
     float molesByParticle;
 
+    public int Nx,Ny,Nz;
+
     [Header("References")]
     public ComputeShader compute;
     public Spawner3D spawner;
@@ -58,6 +60,12 @@ public class Simulation3D : MonoBehaviour
     ComputeBuffer spatialIndices;
     ComputeBuffer spatialOffsets;
 
+    ComputeBuffer GridVertexBuffer;
+    ComputeBuffer GridValueBuffer;
+    ComputeBuffer CubesTriangleVerticesTemperatureBuffer;
+    ComputeBuffer TriangleCountBuffer;
+    public float isoDensity = 1;
+
     // Kernel IDs
     const int predictionKernel = 0;
     const int externalForcesKernel = 1;
@@ -69,6 +77,7 @@ public class Simulation3D : MonoBehaviour
     const int updateSpatialKernel = 7;
     const int updateTemperatureKernel = 8;
     const int deltaTemperatureKernel = 9;
+    const int marchingCubesKernel = 10;
 
     GPUSort gpuSort;
 
@@ -117,6 +126,12 @@ public class Simulation3D : MonoBehaviour
         
         stateVariableBuffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles*stateVariablesBufferStride);
         constantsBuffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles*constantsBufferStride);
+
+        int numVertices = Nx * Ny * Nz;
+        GridVertexBuffer = ComputeHelper.CreateStructuredBuffer<float3>(numVertices*constantsBufferStride);
+        GridValueBuffer = ComputeHelper.CreateStructuredBuffer<float2>(numVertices*constantsBufferStride);
+        CubesTriangleVerticesTemperatureBuffer = ComputeHelper.CreateStructuredBuffer<float4>(15*numVertices*constantsBufferStride);
+        TriangleCountBuffer = ComputeHelper.CreateStructuredBuffer<int>(numVertices*constantsBufferStride);
  
  
         // Set buffer data
@@ -272,6 +287,9 @@ public class Simulation3D : MonoBehaviour
         compute.SetVector("boundsSize", simBoundsSize);
         compute.SetVector("centre", simBoundsCentre);
         compute.SetVector("thermostatPosition", thermostatPosition);
+        compute.SetInt("stateVariablesStride",stateVariablesBufferStride);
+        compute.SetInt("constantsBufferStride",constantsBufferStride);
+        compute.SetFloat("isoDensity",isoDensity);
 
 
         compute.SetMatrix("localToWorld", transform.localToWorldMatrix);
@@ -283,8 +301,6 @@ public class Simulation3D : MonoBehaviour
         // float3[] allPoints = new float3[spawnData.points.Length];
         // System.Array.Copy(spawnData.points, allPoints, spawnData.points.Length);
 
-        compute.SetInt("stateVariablesStride",stateVariablesBufferStride);
-        compute.SetInt("constantsBufferStride",constantsBufferStride);
 
         positionVelocityBuffer.SetData(spawnData.positionsVelocities);
         predictedPositionVelocityBuffer.SetData(spawnData.positionsVelocities);
