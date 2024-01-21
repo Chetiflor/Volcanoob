@@ -34,6 +34,8 @@ RWStructuredBuffer<float> TemperatureLaplacians;
 
 RWStructuredBuffer<float> StateVariables;
 const uint stateVariablesStride;
+RWStructuredBuffer<float> Constants;
+const uint constantsStride;
 
 // Settings
 const uint RK4step;
@@ -204,6 +206,42 @@ void CalculateDensity (uint3 id : SV_DispatchThreadID)
 	Densities[id.x] = float2(density, nearDensity);
 }
 
+float sigmoid(float x)
+{
+	if (x>10) return 1;
+	if (x<-10) return 0;
+	return 1/(1+exp(-x));
+}
+
+float ViscosityFromTemperature(float basicViscosity, float temperature)
+{
+	float constantPortion = 10;
+	float variablePortion = -9;	
+	float center = 800;
+	float scale = 120;
+	
+	return (constantPortion+variablePortion*sigmoid((temperature-center)/scale))*basicViscosity/(constantPortion+max(variablePortion,0));
+}
+
+float ConductivityFromTemperature(float basicConductivity, float temperature)
+{
+	float constantPortion = 5;
+	float variablePortion = 2;	
+	float center = 600;
+	float scale = 400;
+	
+	return (constantPortion+variablePortion*sigmoid((temperature-center)/scale))*basicConductivity/(constantPortion+max(variablePortion,0));
+}
+
+float CapacityFromTemperature(float basicCapacity, float temperature)
+{
+	float constantPortion = 3;
+	float variablePortion = -1;	
+	float center = 700;
+	float scale = 50;
+	
+	return (constantPortion+variablePortion*sigmoid((temperature-center)/scale))*basicCapacity/(constantPortion+max(variablePortion,0));
+}
 
 [numthreads(NumThreads,1,1)]
 void CalculateStateVariables (uint3 id : SV_DispatchThreadID)
@@ -211,14 +249,25 @@ void CalculateStateVariables (uint3 id : SV_DispatchThreadID)
 	if (id.x >= numParticles) return;
 	
 	float density = Densities[id.x][0];
-	float nearDensity = Densities[id.x][1];
+	float densityNear = Densities[id.x][1];
+	float temperature = PredictedTemperatures[id.x];
+	float basicViscosity = Constants[constantsStride * id.x + 2];
+	float basicConductivity = Constants[constantsStride * id.x + 3];
+	float basicCapacity = Constants[constantsStride * id.x + 4];
+	float volumicMass = Constants[constantsStride * id.x + 5];
+	
+	int tmpIndex = stateVariablesStride * id.x;
 
-	float3 pos = PredictedPositionsVelocities[2*id.x];
-	int3 originCell = GetCell3D(pos, smoothingRadius);
-	float sqrRadius = smoothingRadius * smoothingRadius; 
+	StateVariables[tmpIndex + 0] = PressureFromDensity(density,volumicMass);
+	StateVariables[tmpIndex + 1] = NearPressureFromDensity(densityNear/volumicMass);
+	StateVariables[tmpIndex + 2] = ViscosityFromTemperature(basicViscosity,temperature);
+	StateVariables[tmpIndex + 3] = ConductivityFromTemperature(basicConductivity,temperature);
+	StateVariables[tmpIndex + 4] = CapacityFromTemperature(basicCapacity,temperature);	
+	// StateVariables[tmpIndex + 2] = basicViscosity;
+	// StateVariables[tmpIndex + 3] = basicConductivity;
+	// StateVariables[tmpIndex + 4] = basicCapacity;
+	StateVariables[tmpIndex + 5] = volumicMass;
 
-	float3 meanVelocity = (0,0,0);
-	float3 meanNearVelocity = (0,0,0);
 
 
 }
@@ -235,8 +284,9 @@ void PressureForce (uint3 id : SV_DispatchThreadID)
 	float density = Densities[id.x][0];
 	float densityNear = Densities[id.x][1];
 	float volumicMass = StateVariables[stateVariablesStride * id.x + 5];
-	float pressure = PressureFromDensity(density,volumicMass);
-	float nearPressure = NearPressureFromDensity(densityNear/volumicMass);
+
+	float pressure = StateVariables[stateVariablesStride * id.x + 0];
+	float nearPressure = StateVariables[stateVariablesStride * id.x + 1];
 	float3 pressureForce = (0,0,0);
 	
 	float3 pos = PredictedPositionsVelocities[2*id.x];
@@ -271,15 +321,16 @@ void PressureForce (uint3 id : SV_DispatchThreadID)
 
 			// Skip if not within radius
 			if (sqrDstToNeighbour > sqrRadius) continue;
-			foundNeighbour=true;
+
 			float dst = sqrt(sqrDstToNeighbour);
 
 			// Calculate pressure force
+			int tmpIndex = stateVariablesStride * neighbourIndex;
 			float densityNeighbour = Densities[neighbourIndex][0];
 			float nearDensityNeighbour = Densities[neighbourIndex][1];
-			float neighbourVolumicMass = StateVariables[stateVariablesStride * neighbourIndex + 5];
-			float neighbourPressure = PressureFromDensity(densityNeighbour,neighbourVolumicMass);
-			float neighbourPressureNear = NearPressureFromDensity(nearDensityNeighbour/neighbourVolumicMass);
+			float neighbourPressure = StateVariables[tmpIndex + 0];
+			float neighbourPressureNear = StateVariables[tmpIndex + 1];
+			float neighbourVolumicMass = StateVariables[tmpIndex + 5];
 
 			float sharedPressure = (pressure + neighbourPressure) / 2;
 			float sharedNearPressure = (nearPressure + neighbourPressureNear) / 2;
@@ -288,8 +339,8 @@ void PressureForce (uint3 id : SV_DispatchThreadID)
 
 			float3 dir = dst > 0 ? offsetToNeighbour / dst : float3(0, 1, 0);
 
-			pressureForce += dir * DensityDerivative(dst, smoothingRadius) * sharedPressure * neighbourVolumicMass / densityNeighbour ; //normalize by neighbour density
-			//pressureForce += dir * NearDensityDerivative(dst, smoothingRadius) * sharedNearPressure * neighbourVolumicMass  / nearDensityNeighbour;
+			pressureForce += dir * DensityDerivative(dst, smoothingRadius) * sharedPressure * neighbourVolumicMass / densityNeighbour / 2 ; 
+			pressureForce += dir * NearDensityDerivative(dst, smoothingRadius) * sharedNearPressure * neighbourVolumicMass  / nearDensityNeighbour / 2;
 		}
 	
 	}
@@ -441,9 +492,13 @@ void CalculateDeltasTemperature(uint3 id : SV_DispatchThreadID)
 	float volumicMass = StateVariables[stateVariablesStride * id.x + 5];
 	float temperature = PredictedTemperatures[id.x];
 	
-	int3 originCell = GetCell3D(pos, smoothingRadius);
-	float sqrRadius = smoothingRadius * smoothingRadius;
+	float longRadius = smoothingRadius * 5;
+
+	int3 originCell = GetCell3D(pos, longRadius);
+	float sqrRadius = longRadius * longRadius;
 	float gradientTemperature = 0;
+	
+	int foundNeighbours = 0;
 
 	// Neighbour search
 	for (int i = 0; i < 27; i ++)
@@ -451,8 +506,7 @@ void CalculateDeltasTemperature(uint3 id : SV_DispatchThreadID)
 		uint hash = HashCell3D(originCell + offsets3D[i]);
 		uint key = KeyFromHash(hash, numParticles);
 		uint currIndex = SpatialOffsets[key];
-
-		bool foundNeighbour = false;
+		bool foundNeighbourInCell = false;
 
 		while (currIndex < numParticles)
 		{
@@ -476,18 +530,22 @@ void CalculateDeltasTemperature(uint3 id : SV_DispatchThreadID)
 
 			float dst = max(sqrt(sqrDstToNeighbour),0.1);
 
-			// Calculate pressure force
 			float densityNeighbour = Densities[neighbourIndex][0];
 			float temperatureNeighour = PredictedTemperatures[neighbourIndex];
 			float neighbourVolumicMass = StateVariables[id.x * stateVariablesStride + 5];
 
-			gradientTemperature +=  (temperatureNeighour - temperature) * DensityKernel(dst, smoothingRadius) * neighbourVolumicMass / (dst * densityNeighbour); //normalize by neighbour density
+			gradientTemperature +=  (temperatureNeighour - temperature) * DensityKernel(dst, longRadius) * neighbourVolumicMass / (dst * densityNeighbour); //normalize by neighbour density
+			foundNeighbourInCell=true;
+			foundNeighbours++;
 		}
-		if(!foundNeighbour)
-		{
-			gradientTemperature -=  1;
-		}
+		// if(foundNeighbourInCell)
+		// {
+		// 	foundNeighbours++;
+		// }		
+		
 	}
+	float m = 100;
+	gradientTemperature-=100000/(1000.0f+foundNeighbours*foundNeighbours);
 	uint tmpIndex = id.x * stateVariablesStride;
 	float conductivity = StateVariables[tmpIndex+3];
 	float capacity = StateVariables[tmpIndex+4];

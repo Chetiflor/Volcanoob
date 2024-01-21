@@ -266,14 +266,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c8b3b79f98be3f34e8fefade4cef2ade, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  timeScale: 0.3
+  timeScale: 0.1
   fixedTimeStep: 0
   iterationsPerFrame: 3
   gravity: -10
   collisionDamping: 0.95
   smoothingRadius: 0.2
   particleDimension: 0.002
-  dx: 0.001
+  dx: 0.1
   targetDensity: 630
   pressureMultiplier: 288
   nearPressureMultiplier: 2.25
@@ -368,8 +368,9 @@ MonoBehaviour:
   jitterStrength: 0.035
   showSpawnBounds: 1
   R: 0
-  stateVariablesStride: 0
   molesByParticle: 0
+  constantsBufferStride: 0
+  stateVariablesBufferStride: 0
   debug_numParticles: 15625
 --- !u!1 &620375867
 GameObject:
