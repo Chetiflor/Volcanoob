@@ -52,7 +52,9 @@ public class Simulation3D : MonoBehaviour
     public ComputeBuffer predictedTemperatureBuffer;
     public ComputeBuffer laplacianTemperatureBuffer;
     public ComputeBuffer stateVariableBuffer;//pressure, near pressure, viscosity, thermic conductivity, thermic capacity, rho(volumic mass), a(cohesion term), b(molar covolume), M(molar mass)
-    const int stateVariableBufferStride = 9;
+    const int stateVariablesBufferStride = 8;
+    ComputeBuffer constantsBuffer;
+    const int constantsBufferStride = 8;
     ComputeBuffer spatialIndices;
     ComputeBuffer spatialOffsets;
 
@@ -90,7 +92,8 @@ public class Simulation3D : MonoBehaviour
 
         spawner.R = R;
         spawner.molesByParticle = molesByParticle;
-        spawner.stateVariablesStride = stateVariableBufferStride;
+        spawner.constantsBufferStride = constantsBufferStride;
+        spawner.stateVariablesBufferStride = stateVariablesBufferStride;
 
         spawnData = spawner.GetSpawnData();
 
@@ -112,7 +115,8 @@ public class Simulation3D : MonoBehaviour
         spatialIndices = ComputeHelper.CreateStructuredBuffer<uint3>(numParticles);
         spatialOffsets = ComputeHelper.CreateStructuredBuffer<uint>(numParticles);
         
-        stateVariableBuffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles*stateVariableBufferStride);
+        stateVariableBuffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles*stateVariablesBufferStride);
+        constantsBuffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles*constantsBufferStride);
  
  
         // Set buffer data
@@ -125,6 +129,7 @@ public class Simulation3D : MonoBehaviour
 
         ComputeHelper.SetBuffer(compute, spatialIndices, "SpatialIndices", deltaTemperatureKernel, spatialHashKernel, stateVariablesKernel, densityKernel, pressureForcesKernel, laplacianKernel);
         ComputeHelper.SetBuffer(compute, spatialOffsets, "SpatialOffsets", deltaTemperatureKernel, spatialHashKernel, stateVariablesKernel, densityKernel, pressureForcesKernel, laplacianKernel);
+        ComputeHelper.SetBuffer(compute, constantsBuffer, "Constants", stateVariablesKernel);
 
         ComputeHelper.SetBuffer(compute, densityBuffer, "Densities", deltaTemperatureKernel, externalForcesKernel, stateVariablesKernel, densityKernel, pressureForcesKernel, laplacianKernel);
         ComputeHelper.SetBuffer(compute, stateVariableBuffer, "StateVariables", deltaTemperatureKernel, externalForcesKernel, stateVariablesKernel, densityKernel, pressureForcesKernel, laplacianKernel);
@@ -278,7 +283,8 @@ public class Simulation3D : MonoBehaviour
         // float3[] allPoints = new float3[spawnData.points.Length];
         // System.Array.Copy(spawnData.points, allPoints, spawnData.points.Length);
 
-        compute.SetInt("stateVariablesStride",stateVariableBufferStride);
+        compute.SetInt("stateVariablesStride",stateVariablesBufferStride);
+        compute.SetInt("constantsBufferStride",constantsBufferStride);
 
         positionVelocityBuffer.SetData(spawnData.positionsVelocities);
         predictedPositionVelocityBuffer.SetData(spawnData.positionsVelocities);
@@ -286,6 +292,7 @@ public class Simulation3D : MonoBehaviour
         temperatureBuffer.SetData(spawnData.temperatures);
         predictedTemperatureBuffer.SetData(spawnData.temperatures);
 
+        constantsBuffer.SetData(spawnData.constants);
         stateVariableBuffer.SetData(spawnData.stateVariables);
     }
 

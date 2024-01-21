@@ -10,8 +10,9 @@ public class Spawner3D : MonoBehaviour
     public float jitterStrength;
     public bool showSpawnBounds;
     public float R;
-    public int stateVariablesStride;
     public float molesByParticle;
+    public int constantsBufferStride;
+    public int stateVariablesBufferStride;
 
     [Header("Info")]
     public int debug_numParticles;
@@ -22,7 +23,8 @@ public class Spawner3D : MonoBehaviour
 
         float3[] positionsVelocities =new float3[2*numPoints];
         float[] temperatures = new float[numPoints];
-        float[] stateVariables = new float[numPoints * stateVariablesStride];
+        float[] constants = new float[numPoints * constantsBufferStride];
+        float[] stateVariables = new float[numPoints * stateVariablesBufferStride];
 
         int i = 0;
 
@@ -44,11 +46,11 @@ public class Spawner3D : MonoBehaviour
                     positionsVelocities[2*i] = new float3(px, py, pz) + jitter;
                     positionsVelocities[2*i+1] = initialVel;
 
-                    temperatures[i] = 273+1000*ty;
+                    temperatures[i] = 1273;
 
                     // water
 
-                    float viscosity = 0f;
+                    float viscosity = 10000f;
                     float thermicConductivity = 1000000f;
                     float thermicCapacity = 0.4185f;
                     float molarMass = 0.018f; // molar mass
@@ -61,27 +63,38 @@ public class Spawner3D : MonoBehaviour
                     float a = 27 * R * R * tCritic * tCritic / (64 * pCritic);
                     float b = 8 * R * tCritic / pCritic;
 
-                    stateVariables[stateVariablesStride * i + 0] = 0;
-                    stateVariables[stateVariablesStride * i + 1] = 0;
-                    stateVariables[stateVariablesStride * i + 2] = viscosity;
-                    stateVariables[stateVariablesStride * i + 3] = thermicConductivity;
-                    stateVariables[stateVariablesStride * i + 4] = thermicCapacity;
-                    stateVariables[stateVariablesStride * i + 5] = volumicMass;
-                    stateVariables[stateVariablesStride * i + 6] = a;
-                    stateVariables[stateVariablesStride * i + 7] = b;
-                    stateVariables[stateVariablesStride * i + 8] = molarMass;
+
+                    constants[constantsBufferStride * i + 0] = a;
+                    constants[constantsBufferStride * i + 1] = b;
+                    constants[constantsBufferStride * i + 2] = viscosity;
+                    constants[constantsBufferStride * i + 3] = thermicConductivity;
+                    constants[constantsBufferStride * i + 4] = thermicCapacity;
+                    constants[constantsBufferStride * i + 5] = volumicMass;
+                    constants[constantsBufferStride * i + 6] = molarMass;
+                    constants[constantsBufferStride * i + 7] = 0;
+
+                    stateVariables[stateVariablesBufferStride * i + 0] = 0;
+                    stateVariables[stateVariablesBufferStride * i + 1] = 0;
+                    stateVariables[stateVariablesBufferStride * i + 2] = viscosity;
+                    stateVariables[stateVariablesBufferStride * i + 3] = thermicConductivity;
+                    stateVariables[stateVariablesBufferStride * i + 4] = thermicCapacity;
+                    stateVariables[stateVariablesBufferStride * i + 5] = volumicMass;
+                    stateVariables[stateVariablesBufferStride * i + 6] = a;
+                    stateVariables[stateVariablesBufferStride * i + 7] = b;
+
                     i++;
                 }
             }
         }
 
-        return new SpawnData() {  positionsVelocities = positionsVelocities, temperatures = temperatures, stateVariables = stateVariables};
+        return new SpawnData() {  positionsVelocities = positionsVelocities, temperatures = temperatures, constants = constants, stateVariables = stateVariables};
     }
 
     public struct SpawnData
     {
         public float3[] positionsVelocities;
         public float[] temperatures;
+        public float[] constants;
         public float[] stateVariables;
     }
 
