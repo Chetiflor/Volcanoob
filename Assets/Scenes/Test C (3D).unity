@@ -247,7 +247,7 @@ Transform:
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
-  m_LocalScale: {x: 8.6, y: 5.16, z: 5}
+  m_LocalScale: {x: 9.89688, y: 5.16, z: 5}
   m_ConstrainProportionsScale: 0
   m_Children:
   - {fileID: 620375868}
@@ -284,11 +284,15 @@ MonoBehaviour:
   thermostatConductivity: 1000
   athmospherePressure: 100000
   airDensity: 1.3
+  Nx: 10
+  Ny: 10
+  Nz: 10
   compute: {fileID: 7200000, guid: 9443696acfd0ebe4fb503b56d952256c, type: 3}
   spawner: {fileID: 271053323}
   display: {fileID: 271053320}
   floorDisplay: {fileID: 620375868}
   thermostat: {fileID: 1230015180}
+  isoDensity: 1
 --- !u!114 &271053320
 MonoBehaviour:
   m_ObjectHideFlags: 0
