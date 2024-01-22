@@ -13,6 +13,7 @@ public class Spawner3D : MonoBehaviour
     public float molesByParticle;
     public int constantsBufferStride;
     public int stateVariablesBufferStride;
+    public int Nx,Ny,Nz;
 
     [Header("Info")]
     public int debug_numParticles;
@@ -21,6 +22,7 @@ public class Spawner3D : MonoBehaviour
     {
         int numPoints = numParticlesPerAxis * numParticlesPerAxis * numParticlesPerAxis;
 
+        float4[] gridPositions =new float4[Nx*Ny*Nz];
         float3[] positionsVelocities =new float3[2*numPoints];
         float[] temperatures = new float[numPoints];
         float[] constants = new float[numPoints * constantsBufferStride];
@@ -86,13 +88,35 @@ public class Spawner3D : MonoBehaviour
                 }
             }
         }
+        
+        for (int z = 0; z < Nz; z++)
+        {
+            for (int y = 0; y < Ny; y++)
+            {
+                for (int x = 0; x < Nx; x++)
+                {
+                    float tx = x / (Nx - 1f);
+                    float ty = y / (Ny - 1f);
+                    float tz = z / (Nz - 1f);
 
-        return new SpawnData() {  positionsVelocities = positionsVelocities, temperatures = temperatures, constants = constants, stateVariables = stateVariables};
+                    float px = (tx - 0.5f) * size + centre.x;
+                    float py = (ty - 0.5f) * size + centre.y;
+                    float pz = (tz - 0.5f) * size + centre.z;
+
+                    gridPositions[z*Nx*Ny + y*Nx + x] = new float4(px,py,pz,1);
+
+                    i++;
+                }
+            }
+        }
+
+        return new SpawnData() { gridPositions = gridPositions, positionsVelocities = positionsVelocities, temperatures = temperatures, constants = constants, stateVariables = stateVariables};
     }
 
     public struct SpawnData
     {
         public float3[] positionsVelocities;
+        public float4[] gridPositions;
         public float[] temperatures;
         public float[] constants;
         public float[] stateVariables;

@@ -597,7 +597,7 @@ void EvaluateGrid(uint3 id : SV_DispatchThreadID)
 			// Skip if looking at self
 			if (neighbourIndex == id.x) continue;
 
-			float3 neighbourPos = PredictedPositionsVelocities[2*neighbourIndex];
+			float3 neighbourPos = PositionsVelocities[2*neighbourIndex];
 			float3 offsetToNeighbour = neighbourPos - pos;
 			float sqrDstToNeighbour = dot(offsetToNeighbour, offsetToNeighbour);
 
@@ -607,7 +607,7 @@ void EvaluateGrid(uint3 id : SV_DispatchThreadID)
 			float dst = max(sqrt(sqrDstToNeighbour),0.1);
 
 			float densityNeighbour = Densities[neighbourIndex][0];
-			float temperatureNeighour = PredictedTemperatures[neighbourIndex];
+			float temperatureNeighour = Temperatures[neighbourIndex];
 			float neighbourVolumicMass = StateVariables[neighbourIndex * stateVariablesStride + 5];
 
 			float tmp = DensityKernel(dst, smoothingRadius) * neighbourVolumicMass / (dst * densityNeighbour); 
@@ -629,9 +629,6 @@ void MarchingCubes(uint3 id : SV_DispatchThreadID)
 	if(id.x%dimX == dimX - 1 || id.x%dimY == dimY - 1 || id.x%dimZ == dimZ - 1) return;
 
 	float cubeSize = smoothingRadius;
-	int x = id.x % dimX;
-	int y = (id.x / dimX) % dimY;
-	int z = (id.x / (dimX * dimY)) % dimZ;
 
 	int deltaX = 1;
 	int deltaY = dimX;

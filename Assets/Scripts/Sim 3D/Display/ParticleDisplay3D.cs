@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Rendering;
 
 public class ParticleDisplay3D : MonoBehaviour
 {
@@ -7,12 +8,14 @@ public class ParticleDisplay3D : MonoBehaviour
     public Shader mcshader;
     public float scale;
     Mesh mesh;
+    Mesh mcMesh;
     public Color col;
     Material mat;
     Material cubesMat;
 
     ComputeBuffer argsBuffer;
     Bounds bounds;
+    CommandBuffer mcCommandBuffer;
 
     public Gradient colourMap;
     public int gradientResolution;
@@ -23,6 +26,7 @@ public class ParticleDisplay3D : MonoBehaviour
     public bool marchingCubesRendering=true;
     public int meshResolution;
     public int debug_MeshTriCount;
+    int numCubes;
 
     public void Init(Simulation3D sim)
     {
@@ -35,7 +39,9 @@ public class ParticleDisplay3D : MonoBehaviour
         debug_MeshTriCount = mesh.triangles.Length / 3;
         argsBuffer = ComputeHelper.CreateArgsBuffer(mesh, sim.positionVelocityBuffer.count/2);
         bounds = new Bounds(Vector3.zero, Vector3.one * 10000);
-        
+
+        mcCommandBuffer = new CommandBuffer();
+        numCubes = sim.numCubes;
         cubesMat = new Material(mcshader);
         cubesMat.SetBuffer("Vertices", sim.cubesTriangleVerticesBuffer);
         cubesMat.SetBuffer("Temperatures", sim.cubesTriangleTemperaturesBuffer);
@@ -48,7 +54,14 @@ public class ParticleDisplay3D : MonoBehaviour
     {
 
         UpdateSettings();
-        Graphics.DrawMeshInstancedIndirect(mesh, 0, mat, bounds, argsBuffer);
+        if(!marchingCubesRendering)
+        {
+            Graphics.DrawMeshInstancedIndirect(mesh, 0, mat, bounds, argsBuffer);
+        }
+        else
+        {
+            mcCommandBuffer.DrawProcedural(Matrix4x4.Translate(new Vector3(0,0,0)), cubesMat, 0, MeshTopology.Triangles,  numCubes);
+        }
     }
 
     void UpdateSettings()

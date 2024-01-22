@@ -7,10 +7,18 @@ Shader "Unlit/IsoSurface"
     }
     SubShader
     {
+        Pass
+        {
+            
         CGINCLUDE
             #include "UnityCG.cginc"
 
-
+            struct appdata
+            {
+                float4 vertex : POSITION;
+                float4 normal : NORMAL;
+                float2 uv : TEXCOORD0;
+            };
 
             struct v2g
             {
@@ -42,19 +50,19 @@ Shader "Unlit/IsoSurface"
 
         sampler2D ColourMap;
 
-            v2g vert ( uint instanceID : SV_InstanceID)
+            v2g vert ()
             {
                 v2g o;          
-
+                UNITY_INITIALIZE_OUTPUT(v2g, o);
         #ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
                 float2 texcoord = float2 (Temperatures[unity_InstanceID],0);
                 o.uv = texcoord;
-                float4 position = TrianglesPosTemp[unity_InstanceID];
-                position.w = 1
+                float4 position = Vertices[unity_InstanceID];
+                position.w = 1;
                 o.vertex = UnityObjectToClipPos(position);
                 o.normal = float3(0,0,0);
         #endif
-
+                UNITY_TRANSFER_FOG(o,o.vertex);
                 return o;
             }			
 
@@ -73,16 +81,16 @@ Shader "Unlit/IsoSurface"
 
 			#endif
 			}
-            [maxvertexcount(3)]
-            void geom( v2g input[3], uint instanceID : SV_InstanceID, inout TriangleStream<g2f> triStream)
+            [maxvertexcount(15)]
+            void geom(triangle v2g input[3], inout TriangleStream<g2f> triStream)
             {
 
 			#ifdef UNITY_PROCEDURAL_INSTANCING_ENABLED
 
 
                 g2f o;
-                float3 normal = normalize(cross(input[tmp + 1].vertex - input[tmp + 0].vertex, input[tmp + 2].vertex - input[tmp + 0].vertex));
-                if(Mask[instanceID])
+                float3 normal = normalize(cross(input[tmp + 1].vertex.xyz - input[tmp + 0].vertex.xyz, input[tmp + 2].vertex.xyz - input[tmp + 0].vertex.xyz));
+                if(Mask[instanceID/3]==1)
                 {
                     for(int j = 0; j < 3; j++)
                     {
@@ -107,50 +115,10 @@ Shader "Unlit/IsoSurface"
 
             }
         ENDCG
-
-        Pass
-        {
-            Tags { "RenderType"="Opaque" "LightMode" = "ForwardBase"}
-            LOD 100
-            CGPROGRAM
-            #pragma vertex vert
-            #pragma geometry geom
-            #pragma fragment frag
-            #pragma multi_compile_fog
-            #pragma multi_compile_fwdbase
-            #pragma shader_feature IS_LIT
-			#pragma require geometry
-			#pragma target 4.5
-
-            fixed4 frag (g2f i) : SV_Target
-            {
-                // orangy color
-                fixed4 col = fixed4(0.9,0.7,0.1,1);
-                //lighting
-                fixed light = saturate (dot (normalize(_WorldSpaceLightPos0), i.normal));
-                col.rgb *= light;    
-                // apply fog
-                UNITY_APPLY_FOG(i.fogCoord, col);
-                return col;
-            }
-            ENDCG
         }
 
-        Pass
-        {
-        Tags { "RenderType"="Opaque" "LightMode" = "ShadowCaster" }
-        LOD 100
-        CGPROGRAM
-            #pragma vertex vert
-            #pragma geometry geom
-            #pragma fragment fragShadow
-            #pragma target 4.6
-            #pragma multi_compile_shadowcaster
-            float4 fragShadow(g2f i) : SV_Target
-            {
-                SHADOW_CASTER_FRAGMENT(i)
-            }   
-        ENDCG
-        }
+        
+
+
     }
 }

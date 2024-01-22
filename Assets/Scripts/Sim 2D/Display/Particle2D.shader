@@ -29,7 +29,7 @@ Shader "Instanced/Particle2D" {
 
 			struct v2f
 			{
-				float4 pos : SV_POSITION;
+				float4 pos : POSITION;
 				float2 uv : TEXCOORD0;
 				float3 colour : TEXCOORD1;
 			};
