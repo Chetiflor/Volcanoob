@@ -8,6 +8,7 @@
 #pragma kernel UpdateSpatial
 #pragma kernel UpdateTemperature
 #pragma kernel CalculateDeltasTemperature
+#pragma kernel EvaluateGrid
 #pragma kernel MarchingCubes
 
 // Includes
@@ -45,8 +46,10 @@ const int dimZ;
 const float isoDensity;
 RWStructuredBuffer<float3> GridVertices;
 RWStructuredBuffer<float2> GridValues; // density, temperature
-RWStructuredBuffer<float4> CubesTrianglesVerticesTemperatures;
+RWStructuredBuffer<float> CubesTrianglesTemperatures;
+RWStructuredBuffer<float4> CubesTrianglesVertices;
 RWStructuredBuffer<int> TriangleCounts;
+RWTexture2D<float4> ColourMap;
 
 // Settings
 const uint RK4step;
@@ -693,10 +696,13 @@ void MarchingCubes(uint3 id : SV_DispatchThreadID)
 	int count = 0;
 	for (int i = 0; triangleTable[cubeIndex][i] != -1; i += 3)
 	{
-		int tmpIndex = 15*id.x+i*6;
-		CubesTrianglesVerticesTemperatures[tmpIndex + 0] = vertList[triangleTable[cubeIndex][i + 0]];
-		CubesTrianglesVerticesTemperatures[tmpIndex + 1] = vertList[triangleTable[cubeIndex][i + 1]];
-		CubesTrianglesVerticesTemperatures[tmpIndex + 2] = vertList[triangleTable[cubeIndex][i + 2]];
+		int tmpIndex = 15*id.x+i*3;
+		CubesTrianglesVertices[tmpIndex + 0] = float4(vertList[triangleTable[cubeIndex][i + 0]].xyz,1);
+		CubesTrianglesVertices[tmpIndex + 1] = float4(vertList[triangleTable[cubeIndex][i + 1]].xyz,1);
+		CubesTrianglesVertices[tmpIndex + 2] = float4(vertList[triangleTable[cubeIndex][i + 2]].xyz,1);
+		CubesTrianglesTemperatures[tmpIndex + 0] = vertList[triangleTable[cubeIndex][i + 0]].w;
+		CubesTrianglesTemperatures[tmpIndex + 1] = vertList[triangleTable[cubeIndex][i + 1]].w;
+		CubesTrianglesTemperatures[tmpIndex + 2] = vertList[triangleTable[cubeIndex][i + 2]].w;
 		count++;
 	}
 	TriangleCounts[id.x] = count;

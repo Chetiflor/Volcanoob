@@ -4,10 +4,12 @@ public class ParticleDisplay3D : MonoBehaviour
 {
 
     public Shader shader;
+    public Shader mcshader;
     public float scale;
     Mesh mesh;
     public Color col;
     Material mat;
+    Material cubesMat;
 
     ComputeBuffer argsBuffer;
     Bounds bounds;
@@ -18,6 +20,7 @@ public class ParticleDisplay3D : MonoBehaviour
     Texture2D gradientTexture;
     bool needsUpdate;
 
+    public bool marchingCubesRendering=true;
     public int meshResolution;
     public int debug_MeshTriCount;
 
@@ -32,6 +35,10 @@ public class ParticleDisplay3D : MonoBehaviour
         debug_MeshTriCount = mesh.triangles.Length / 3;
         argsBuffer = ComputeHelper.CreateArgsBuffer(mesh, sim.positionVelocityBuffer.count/2);
         bounds = new Bounds(Vector3.zero, Vector3.one * 10000);
+        
+        cubesMat = new Material(mcshader);
+
+
     }
 
     void LateUpdate()

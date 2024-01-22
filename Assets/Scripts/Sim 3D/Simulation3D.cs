@@ -32,7 +32,7 @@ public class Simulation3D : MonoBehaviour
     public float airDensity = 1.3f;
     float molesByParticle;
 
-    public int Nx,Ny,Nz;
+    public int Nx,Ny,Nz,numVertices;
 
     [Header("References")]
     public ComputeShader compute;
@@ -60,10 +60,11 @@ public class Simulation3D : MonoBehaviour
     ComputeBuffer spatialIndices;
     ComputeBuffer spatialOffsets;
 
-    ComputeBuffer GridVertexBuffer;
-    ComputeBuffer GridValueBuffer;
-    ComputeBuffer CubesTriangleVerticesTemperatureBuffer;
-    ComputeBuffer TriangleCountBuffer;
+    ComputeBuffer gridVertexBuffer;
+    ComputeBuffer gridValueBuffer;
+    ComputeBuffer cubesTriangleVerticesBuffer;
+    ComputeBuffer cubesTriangleTemperaturesBuffer;
+    ComputeBuffer triangleCountBuffer;
     public float isoDensity = 1;
 
     // Kernel IDs
@@ -77,7 +78,8 @@ public class Simulation3D : MonoBehaviour
     const int updateSpatialKernel = 7;
     const int updateTemperatureKernel = 8;
     const int deltaTemperatureKernel = 9;
-    const int marchingCubesKernel = 10;
+    const int evaluateGridKernel = 10;
+    const int marchingCubesKernel = 11;
 
     GPUSort gpuSort;
 
@@ -127,11 +129,12 @@ public class Simulation3D : MonoBehaviour
         stateVariableBuffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles*stateVariablesBufferStride);
         constantsBuffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles*constantsBufferStride);
 
-        int numVertices = Nx * Ny * Nz;
-        GridVertexBuffer = ComputeHelper.CreateStructuredBuffer<float3>(numVertices*constantsBufferStride);
-        GridValueBuffer = ComputeHelper.CreateStructuredBuffer<float2>(numVertices*constantsBufferStride);
-        CubesTriangleVerticesTemperatureBuffer = ComputeHelper.CreateStructuredBuffer<float4>(15*numVertices*constantsBufferStride);
-        TriangleCountBuffer = ComputeHelper.CreateStructuredBuffer<int>(numVertices*constantsBufferStride);
+        numVertices = Nx * Ny * Nz;
+        gridVertexBuffer = ComputeHelper.CreateStructuredBuffer<float3>(numVertices);
+        gridValueBuffer = ComputeHelper.CreateStructuredBuffer<float2>(numVertices);
+        cubesTriangleVerticesBuffer = ComputeHelper.CreateStructuredBuffer<float4>(15*numVertices);
+        cubesTriangleTemperaturesBuffer = ComputeHelper.CreateStructuredBuffer<float>(15*numVertices);
+        triangleCountBuffer = ComputeHelper.CreateStructuredBuffer<int>(numVertices);
  
  
         // Set buffer data
@@ -156,6 +159,11 @@ public class Simulation3D : MonoBehaviour
         ComputeHelper.SetBuffer(compute, RK4AccelerationBuffer, "RK4Accelerations", updateSpatialKernel, externalForcesKernel, pressureForcesKernel, laplacianKernel, predictionKernel);
         ComputeHelper.SetBuffer(compute, RK4HeatBuffer, "RK4TemperatureDerivative", updateTemperatureKernel, deltaTemperatureKernel, predictionKernel);
 
+        ComputeHelper.SetBuffer(compute, gridVertexBuffer, "GridVertices", evaluateGridKernel, marchingCubesKernel);
+        ComputeHelper.SetBuffer(compute, gridValueBuffer, "GridValues", evaluateGridKernel, marchingCubesKernel);
+        ComputeHelper.SetBuffer(compute, cubesTriangleVerticesBuffer, "CubesTrianglesTemperatures", marchingCubesKernel);
+        ComputeHelper.SetBuffer(compute, cubesTriangleTemperaturesBuffer, "CubesTrianglesVertices", marchingCubesKernel);
+        ComputeHelper.SetBuffer(compute, triangleCountBuffer, "TriangleCounts", marchingCubesKernel);
 
         compute.SetInt("numParticles", temperatureBuffer.count);
         compute.SetFloat("R", R);
@@ -175,6 +183,10 @@ public class Simulation3D : MonoBehaviour
         {
             RunSimulationFrame(Time.fixedDeltaTime);
         }
+        if(display.marchingCubesRendering)
+        {
+            UpdateMesh();
+        }
     }
 
     void Update()
@@ -193,8 +205,11 @@ public class Simulation3D : MonoBehaviour
         }
         floorDisplay.transform.localScale = new Vector3(1, 1 / transform.localScale.y * 0.1f, 1);
         thermostatPosition = thermostat.transform.position;
-
         HandleInput();
+        if(display.marchingCubesRendering)
+        {
+            UpdateMesh();
+        }
     }
 
     void RunSimulationFrame(float frameTime)
@@ -262,6 +277,10 @@ public class Simulation3D : MonoBehaviour
 
         ComputeHelper.Dispatch(compute, temperatureBuffer.count, kernelIndex: updateSpatialKernel);
         ComputeHelper.Dispatch(compute, temperatureBuffer.count, kernelIndex: updateTemperatureKernel);
+
+        ComputeHelper.Dispatch(compute, temperatureBuffer.count, kernelIndex: densityKernel);
+        ComputeHelper.Dispatch(compute, gridValueBuffer.count, kernelIndex: evaluateGridKernel);
+        ComputeHelper.Dispatch(compute, gridValueBuffer.count, kernelIndex: marchingCubesKernel);
 
     }
 
@@ -345,6 +364,36 @@ public class Simulation3D : MonoBehaviour
         Gizmos.color = new Color(0, 1, 0, 0.5f);
         Gizmos.DrawWireCube(Vector3.zero, Vector3.one);
         Gizmos.matrix = m;
+
+    }
+    void UpdateMesh()
+    {
+        // float4[] verticesCoords = new float4[15*numVertices];
+        // float[] verticesTemperatures = new float[15*numVertices];
+        // int[] trianglesCount = new int[numVertices];
+
+        // cubesTriangleVerticesBuffer.GetData(verticesCoords);
+        // cubesTriangleTemperaturesBuffer.GetData(verticesTemperatures);
+        // triangleCountBuffer.GetData(triangleCount);
+
+        // List<float4>  verticesCoordsCleant = new List<float4>();
+        // List<float>  verticesTemperaturesCleant = new List<float>();
+
+        // for(int i = 0; i<numVertices; i++)
+        // {
+        //     for(int j = 0; j<trianglesCount[i]; j++)
+        //     {
+        //         int tmp = i*15+3*j;
+        //         for(int k=3; k<3; k++)
+        //         {
+        //             verticesCoordsCleant.Add(verticesCoords[tmp+k]);
+        //             verticesTemperaturesCleant.Add(verticesTemperatures[tmp+k]);
+        //         }
+        //     }
+        // }
+        
+
+
 
     }
 }

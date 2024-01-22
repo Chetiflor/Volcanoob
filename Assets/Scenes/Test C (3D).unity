@@ -306,6 +306,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   shader: {fileID: 4800000, guid: 7b2961949ddfb237da69ed497e96a9b5, type: 3}
+  mcshader: {fileID: 211, guid: 0000000000000000f000000000000000, type: 0}
   scale: 0.05
   col: {r: 0.27803493, g: 0.49487686, b: 0.8301887, a: 1}
   colourMap:
@@ -340,6 +341,7 @@ MonoBehaviour:
     m_NumAlphaKeys: 2
   gradientResolution: 50
   velocityDisplayMax: 6
+  marchingCubesRendering: 1
   meshResolution: 3
   debug_MeshTriCount: 2
 --- !u!33 &271053322
