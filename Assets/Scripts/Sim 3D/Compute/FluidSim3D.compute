@@ -48,8 +48,7 @@ RWStructuredBuffer<float3> GridVertices;
 RWStructuredBuffer<float2> GridValues; // density, temperature
 RWStructuredBuffer<float> CubesTrianglesTemperatures;
 RWStructuredBuffer<float4> CubesTrianglesVertices;
-RWStructuredBuffer<int> TriangleCounts;
-RWTexture2D<float4> ColourMap;
+RWStructuredBuffer<int> TriangleMasks;
 
 // Settings
 const uint RK4step;
@@ -678,7 +677,6 @@ void MarchingCubes(uint3 id : SV_DispatchThreadID)
 
 	int edgeMask = edgeTable[cubeIndex];
 	float4 vertList[12];
-	TriangleCounts[id.x] = 0;
 	if (edgeMask == 0) return;
 	if ((edgeMask & 1) > 0) vertList[0] =     interpolate(gridVerticesTemperatures[0],gridVerticesTemperatures[1],gridValues[0],gridValues[1]);
 	if ((edgeMask & 2) > 0) vertList[1] =     interpolate(gridVerticesTemperatures[1],gridVerticesTemperatures[2],gridValues[1],gridValues[2]);
@@ -692,8 +690,13 @@ void MarchingCubes(uint3 id : SV_DispatchThreadID)
 	if ((edgeMask & 512) > 0) vertList[9] =   interpolate(gridVerticesTemperatures[1],gridVerticesTemperatures[5],gridValues[1],gridValues[5]);
 	if ((edgeMask & 1024) > 0) vertList[10] = interpolate(gridVerticesTemperatures[2],gridVerticesTemperatures[6],gridValues[2],gridValues[6]);
 	if ((edgeMask & 2048) > 0) vertList[11] = interpolate(gridVerticesTemperatures[3],gridVerticesTemperatures[7],gridValues[3],gridValues[7]);
-	
-	int count = 0;
+
+	int tmp = 5*id.x;	
+	TriangleMasks[tmp + 0] = 0;
+	TriangleMasks[tmp + 1] = 0;
+	TriangleMasks[tmp + 2] = 0;
+	TriangleMasks[tmp + 3] = 0;
+	TriangleMasks[tmp + 4] = 0;
 	for (int i = 0; triangleTable[cubeIndex][i] != -1; i += 3)
 	{
 		int tmpIndex = 15*id.x+i*3;
@@ -703,8 +706,7 @@ void MarchingCubes(uint3 id : SV_DispatchThreadID)
 		CubesTrianglesTemperatures[tmpIndex + 0] = vertList[triangleTable[cubeIndex][i + 0]].w;
 		CubesTrianglesTemperatures[tmpIndex + 1] = vertList[triangleTable[cubeIndex][i + 1]].w;
 		CubesTrianglesTemperatures[tmpIndex + 2] = vertList[triangleTable[cubeIndex][i + 2]].w;
-		count++;
+		TriangleMasks[tmpIndex/3] = 1;
 	}
-	TriangleCounts[id.x] = count;
 
 }

@@ -37,6 +37,9 @@ public class ParticleDisplay3D : MonoBehaviour
         bounds = new Bounds(Vector3.zero, Vector3.one * 10000);
         
         cubesMat = new Material(mcshader);
+        cubesMat.SetBuffer("Vertices", sim.cubesTriangleVerticesBuffer);
+        cubesMat.SetBuffer("Temperatures", sim.cubesTriangleTemperaturesBuffer);
+        cubesMat.SetBuffer("Mask", sim.triangleMasksBuffer);
 
 
     }

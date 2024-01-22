@@ -60,11 +60,11 @@ public class Simulation3D : MonoBehaviour
     ComputeBuffer spatialIndices;
     ComputeBuffer spatialOffsets;
 
-    ComputeBuffer gridVertexBuffer;
-    ComputeBuffer gridValueBuffer;
-    ComputeBuffer cubesTriangleVerticesBuffer;
-    ComputeBuffer cubesTriangleTemperaturesBuffer;
-    ComputeBuffer triangleCountBuffer;
+    public ComputeBuffer gridVertexBuffer;
+    public ComputeBuffer gridValueBuffer;
+    public ComputeBuffer cubesTriangleVerticesBuffer;
+    public ComputeBuffer cubesTriangleTemperaturesBuffer;
+    public ComputeBuffer triangleMasksBuffer;
     public float isoDensity = 1;
 
     // Kernel IDs
@@ -134,7 +134,7 @@ public class Simulation3D : MonoBehaviour
         gridValueBuffer = ComputeHelper.CreateStructuredBuffer<float2>(numVertices);
         cubesTriangleVerticesBuffer = ComputeHelper.CreateStructuredBuffer<float4>(15*numVertices);
         cubesTriangleTemperaturesBuffer = ComputeHelper.CreateStructuredBuffer<float>(15*numVertices);
-        triangleCountBuffer = ComputeHelper.CreateStructuredBuffer<int>(numVertices);
+        triangleMasksBuffer = ComputeHelper.CreateStructuredBuffer<int>(5*numVertices);
  
  
         // Set buffer data
@@ -163,7 +163,7 @@ public class Simulation3D : MonoBehaviour
         ComputeHelper.SetBuffer(compute, gridValueBuffer, "GridValues", evaluateGridKernel, marchingCubesKernel);
         ComputeHelper.SetBuffer(compute, cubesTriangleVerticesBuffer, "CubesTrianglesTemperatures", marchingCubesKernel);
         ComputeHelper.SetBuffer(compute, cubesTriangleTemperaturesBuffer, "CubesTrianglesVertices", marchingCubesKernel);
-        ComputeHelper.SetBuffer(compute, triangleCountBuffer, "TriangleCounts", marchingCubesKernel);
+        ComputeHelper.SetBuffer(compute, triangleMasksBuffer, "TriangleMasks", marchingCubesKernel);
 
         compute.SetInt("numParticles", temperatureBuffer.count);
         compute.SetFloat("R", R);
@@ -391,7 +391,7 @@ public class Simulation3D : MonoBehaviour
         //         }
         //     }
         // }
-        
+
 
 
 
