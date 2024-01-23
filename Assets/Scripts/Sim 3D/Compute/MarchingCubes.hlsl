@@ -1,9 +1,13 @@
 float4 interpolate(float4 p1, float4 p2, float v1, float v2, float v)
 {
 	bool b = (abs(v1 - v2) > 0.01) || (v > max(v1, v2)) || (v < min(v1, v2));
-	if (b) return (p1 + p2) / 2;
+	if (b)
+	{
+		
+		return float4((p1.xyz + p2.xyz) / 2, (p1.w+p2.w)/2);
+	} 
     float mu = (v - v1) / (v2 - v1);
-    return p1 + mu * (p2 - p1);
+    return float4(p1.xyz + mu * (p2.xyz - p1.xyz), p1.w + mu * (p2.w - p1.w));
 }
 
 static const int edgeTable[256] =

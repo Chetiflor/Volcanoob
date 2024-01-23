@@ -571,20 +571,20 @@ void CalculateDeltasTemperature(uint3 id : SV_DispatchThreadID)
 void EvaluateGrid(uint3 id : SV_DispatchThreadID)
 {
 	float3 pos = GridVertices[id.x];
-	float multiplier = 8;
+	float multiplier = 10;
 	float longRadius = smoothingRadius * multiplier;
 	int3 originCell = GetCell3D(pos, 4*longRadius);
 	float sqrRadius = longRadius * longRadius;
 
 	float density = 0;
 	float temperature = 0;
+	float sumDst = 0;
 
 	for (int i = 0; i < 27; i ++)
 	{
 		uint hash = HashCell3D(originCell + offsets3D[i]);
 		uint key = KeyFromHash(hash, numParticles);
 		uint currIndex = SpatialOffsets[key];
-		bool foundNeighbourInCell = false;
 
 		while (currIndex < numParticles)
 		{
@@ -614,13 +614,14 @@ void EvaluateGrid(uint3 id : SV_DispatchThreadID)
 
 			float tmp = DensityKernel(dst, longRadius) * neighbourVolumicMass ; 
 			density += tmp;
-			temperature += tmp * temperatureNeighour / densityNeighbour;
+			temperature += sqrDstToNeighbour * temperatureNeighour;
+			sumDst += sqrDstToNeighbour;
 
 		}
 		
 	}
 
-	GridValues[id.x] = float2(density,temperature);
+	GridValues[id.x] = float2(density,temperature/max(sumDst,0.00001));
 }
 
 
@@ -713,11 +714,11 @@ void MarchingCubes(uint3 id : SV_DispatchThreadID)
 	{
 		int tmpIndex = 15*id.x+i*3;
 		CubesTrianglesVertices[tmpIndex + 0] = vertList[triangleTable[cubeIndex][i + 0]];
-		CubesTrianglesVertices[tmpIndex + 1] = vertList[triangleTable[cubeIndex][i + 1]];
-		CubesTrianglesVertices[tmpIndex + 2] = vertList[triangleTable[cubeIndex][i + 2]];
+		CubesTrianglesVertices[tmpIndex + 1] = vertList[triangleTable[cubeIndex][i + 2]];
+		CubesTrianglesVertices[tmpIndex + 2] = vertList[triangleTable[cubeIndex][i + 1]];
 		CubesTrianglesTemperatures[tmpIndex + 0] = vertList[triangleTable[cubeIndex][i + 0]].w;
-		CubesTrianglesTemperatures[tmpIndex + 1] = vertList[triangleTable[cubeIndex][i + 1]].w;
-		CubesTrianglesTemperatures[tmpIndex + 2] = vertList[triangleTable[cubeIndex][i + 2]].w;
+		CubesTrianglesTemperatures[tmpIndex + 1] = vertList[triangleTable[cubeIndex][i + 2]].w;
+		CubesTrianglesTemperatures[tmpIndex + 2] = vertList[triangleTable[cubeIndex][i + 1]].w;
 		TriangleMasks[maskIndex + i] = 1;
 	}
 

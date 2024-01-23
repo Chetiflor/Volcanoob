@@ -104,19 +104,18 @@ public class Spawner3D : MonoBehaviour
                     float ty = y / (Ny - 1f);
                     float tz = z / (Nz - 1f);
 
-                    // float px = (tx - 0.5f) * simTransform.localScale.x + simTransform.position.x;
-                    // float py = (ty - 0.5f) * simTransform.localScale.y + simTransform.position.y;
-                    // float pz = (tz - 0.5f) * simTransform.localScale.z + simTransform.position.z;
+                    float px = (tx - 0.5f) * simTransform.localScale.x + simTransform.position.x;
+                    float py = (ty - 0.5f) * simTransform.localScale.y + simTransform.position.y;
+                    float pz = (tz - 0.5f) * simTransform.localScale.z + simTransform.position.z;
 
-                    float px = (tx - 0.5f) * size + centre.x;
-                    float py = (ty - 0.5f) * size + centre.y;
-                    float pz = (tz - 0.5f) * size + centre.z;
+                    // float px = (tx - 0.5f) * size + centre.x;
+                    // float py = (ty - 0.5f) * size + centre.y;
+                    // float pz = (tz - 0.5f) * size + centre.z;
 
                     float3 pos = new float3(px,py,pz);
 
                     gridPositions[z*Nx*Ny + y*Nx + x] = pos;
 
-                    i++;
                 }
             }
         }
