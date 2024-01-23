@@ -47,7 +47,7 @@ const float isoDensity;
 RWStructuredBuffer<float3> GridVertices;
 RWStructuredBuffer<float2> GridValues; // density, temperature
 RWStructuredBuffer<float> CubesTrianglesTemperatures;
-RWStructuredBuffer<float4> CubesTrianglesVertices;
+RWStructuredBuffer<float3> CubesTrianglesVertices;
 RWStructuredBuffer<int> TriangleMasks;
 
 // Settings
@@ -610,9 +610,9 @@ void EvaluateGrid(uint3 id : SV_DispatchThreadID)
 			float temperatureNeighour = Temperatures[neighbourIndex];
 			float neighbourVolumicMass = StateVariables[neighbourIndex * stateVariablesStride + 5];
 
-			float tmp = DensityKernel(dst, smoothingRadius) * neighbourVolumicMass / (dst * densityNeighbour); 
-			density += tmp * densityNeighbour;
-			temperature += tmp * temperatureNeighour;
+			float tmp = SmoothingKernelPoly6(dst, smoothingRadius) * neighbourVolumicMass ; 
+			density += tmp;
+			temperature += tmp * temperatureNeighour / densityNeighbour;
 
 		}
 		
@@ -626,8 +626,13 @@ void EvaluateGrid(uint3 id : SV_DispatchThreadID)
 void MarchingCubes(uint3 id : SV_DispatchThreadID)
 {
 
-	if(id.x%dimX == dimX - 1 || id.x%dimY == dimY - 1 || id.x%dimZ == dimZ - 1) return;
 
+	int test = id.x*15;
+	for(int i=0; i<15;i++)
+	{
+		CubesTrianglesTemperatures[test + i] = 600.0f;
+	}
+	return;
 	float cubeSize = smoothingRadius;
 
 	int deltaX = 1;
@@ -675,20 +680,20 @@ void MarchingCubes(uint3 id : SV_DispatchThreadID)
 	int edgeMask = edgeTable[cubeIndex];
 	float4 vertList[12];
 	if (edgeMask == 0) return;
-	if ((edgeMask & 1) > 0) vertList[0] =     interpolate(gridVerticesTemperatures[0],gridVerticesTemperatures[1],gridValues[0],gridValues[1]);
-	if ((edgeMask & 2) > 0) vertList[1] =     interpolate(gridVerticesTemperatures[1],gridVerticesTemperatures[2],gridValues[1],gridValues[2]);
-	if ((edgeMask & 4) > 0) vertList[2] =     interpolate(gridVerticesTemperatures[2],gridVerticesTemperatures[3],gridValues[2],gridValues[3]);
-	if ((edgeMask & 8) > 0) vertList[3] =     interpolate(gridVerticesTemperatures[3],gridVerticesTemperatures[0],gridValues[3],gridValues[0]);
-	if ((edgeMask & 16) > 0) vertList[4] =    interpolate(gridVerticesTemperatures[4],gridVerticesTemperatures[5],gridValues[4],gridValues[5]);
-	if ((edgeMask & 32) > 0) vertList[5] =    interpolate(gridVerticesTemperatures[5],gridVerticesTemperatures[6],gridValues[5],gridValues[6]);
-	if ((edgeMask & 64) > 0) vertList[6] =    interpolate(gridVerticesTemperatures[6],gridVerticesTemperatures[7],gridValues[6],gridValues[7]);
-	if ((edgeMask & 128) > 0) vertList[7] =   interpolate(gridVerticesTemperatures[7],gridVerticesTemperatures[4],gridValues[7],gridValues[4]);
-	if ((edgeMask & 256) > 0) vertList[8] =   interpolate(gridVerticesTemperatures[0],gridVerticesTemperatures[4],gridValues[0],gridValues[4]);
-	if ((edgeMask & 512) > 0) vertList[9] =   interpolate(gridVerticesTemperatures[1],gridVerticesTemperatures[5],gridValues[1],gridValues[5]);
-	if ((edgeMask & 1024) > 0) vertList[10] = interpolate(gridVerticesTemperatures[2],gridVerticesTemperatures[6],gridValues[2],gridValues[6]);
-	if ((edgeMask & 2048) > 0) vertList[11] = interpolate(gridVerticesTemperatures[3],gridVerticesTemperatures[7],gridValues[3],gridValues[7]);
-
-	int tmp = 5*id.x;	
+	if ((edgeMask & 1) > 0) vertList[0] =     interpolate(gridVerticesTemperatures[0],gridVerticesTemperatures[1],gridValues[0],gridValues[1],isoDensity);
+	if ((edgeMask & 2) > 0) vertList[1] =     interpolate(gridVerticesTemperatures[1],gridVerticesTemperatures[2],gridValues[1],gridValues[2],isoDensity);
+	if ((edgeMask & 4) > 0) vertList[2] =     interpolate(gridVerticesTemperatures[2],gridVerticesTemperatures[3],gridValues[2],gridValues[3],isoDensity);
+	if ((edgeMask & 8) > 0) vertList[3] =     interpolate(gridVerticesTemperatures[3],gridVerticesTemperatures[0],gridValues[3],gridValues[0],isoDensity);
+	if ((edgeMask & 16) > 0) vertList[4] =    interpolate(gridVerticesTemperatures[4],gridVerticesTemperatures[5],gridValues[4],gridValues[5],isoDensity);
+	if ((edgeMask & 32) > 0) vertList[5] =    interpolate(gridVerticesTemperatures[5],gridVerticesTemperatures[6],gridValues[5],gridValues[6],isoDensity);
+	if ((edgeMask & 64) > 0) vertList[6] =    interpolate(gridVerticesTemperatures[6],gridVerticesTemperatures[7],gridValues[6],gridValues[7],isoDensity);
+	if ((edgeMask & 128) > 0) vertList[7] =   interpolate(gridVerticesTemperatures[7],gridVerticesTemperatures[4],gridValues[7],gridValues[4],isoDensity);
+	if ((edgeMask & 256) > 0) vertList[8] =   interpolate(gridVerticesTemperatures[0],gridVerticesTemperatures[4],gridValues[0],gridValues[4],isoDensity);
+	if ((edgeMask & 512) > 0) vertList[9] =   interpolate(gridVerticesTemperatures[1],gridVerticesTemperatures[5],gridValues[1],gridValues[5],isoDensity);
+	if ((edgeMask & 1024) > 0) vertList[10] = interpolate(gridVerticesTemperatures[2],gridVerticesTemperatures[6],gridValues[2],gridValues[6],isoDensity);
+	if ((edgeMask & 2048) > 0) vertList[11] = interpolate(gridVerticesTemperatures[3],gridVerticesTemperatures[7],gridValues[3],gridValues[7],isoDensity);
+	
+	int tmp = 5 * id.x;
 	TriangleMasks[tmp + 0] = 0;
 	TriangleMasks[tmp + 1] = 0;
 	TriangleMasks[tmp + 2] = 0;
@@ -697,12 +702,15 @@ void MarchingCubes(uint3 id : SV_DispatchThreadID)
 	for (int i = 0; triangleTable[cubeIndex][i] != -1; i += 3)
 	{
 		int tmpIndex = 15*id.x+i*3;
-		CubesTrianglesVertices[tmpIndex + 0] = float4(vertList[triangleTable[cubeIndex][i + 0]].xyz,1);
-		CubesTrianglesVertices[tmpIndex + 1] = float4(vertList[triangleTable[cubeIndex][i + 1]].xyz,1);
-		CubesTrianglesVertices[tmpIndex + 2] = float4(vertList[triangleTable[cubeIndex][i + 2]].xyz,1);
+		CubesTrianglesVertices[tmpIndex + 0] = vertList[triangleTable[cubeIndex][i + 0]];
+		CubesTrianglesVertices[tmpIndex + 1] = vertList[triangleTable[cubeIndex][i + 1]];
+		CubesTrianglesVertices[tmpIndex + 2] = vertList[triangleTable[cubeIndex][i + 2]];
 		CubesTrianglesTemperatures[tmpIndex + 0] = vertList[triangleTable[cubeIndex][i + 0]].w;
 		CubesTrianglesTemperatures[tmpIndex + 1] = vertList[triangleTable[cubeIndex][i + 1]].w;
 		CubesTrianglesTemperatures[tmpIndex + 2] = vertList[triangleTable[cubeIndex][i + 2]].w;
+		// CubesTrianglesTemperatures[tmpIndex + 0] = id.x/1273.0f;
+		// CubesTrianglesTemperatures[tmpIndex + 1] = id.x/1273.0f;
+		// CubesTrianglesTemperatures[tmpIndex + 2] = id.x/1273.0f;
 		TriangleMasks[tmpIndex/3] = 1;
 	}
 

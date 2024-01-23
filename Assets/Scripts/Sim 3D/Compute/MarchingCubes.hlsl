@@ -1,6 +1,7 @@
-float4 interpolate(float4 p1, float4 p2, float v1, float v2)
+float4 interpolate(float4 p1, float4 p2, float v1, float v2, float v)
 {
-    float mu = (1.0f - v1) / (v2 - v1);
+	if (v1 == v2) return (p1 + p2) / 2;
+    float mu = (v - v1) / (v2 - v1);
     return p1 + mu * (p2 - p1);
 }
 

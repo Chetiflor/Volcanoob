@@ -1,4 +1,5 @@
 using System.IO.Pipes;
+using System.Collections;
 using UnityEngine;
 using Unity.Mathematics;
 
@@ -33,6 +34,7 @@ public class Simulation3D : MonoBehaviour
     float molesByParticle;
 
     public int Nx,Ny,Nz,numVertices,numCubes;
+    public bool drawGrid;
 
     [Header("References")]
     public ComputeShader compute;
@@ -66,6 +68,10 @@ public class Simulation3D : MonoBehaviour
     public ComputeBuffer cubesTriangleTemperaturesBuffer;
     public ComputeBuffer triangleMasksBuffer;
     public float isoDensity = 1;
+
+    public Shader mcshader;
+    Material cubesMat;
+    Bounds bounds;
 
     // Kernel IDs
     const int predictionKernel = 0;
@@ -135,9 +141,9 @@ public class Simulation3D : MonoBehaviour
 
         numVertices = Nx * Ny * Nz;
         numCubes = (Nx -1) * (Ny - 1) * (Nz - 1);
-        gridVertexBuffer = ComputeHelper.CreateStructuredBuffer<float4>(numVertices);
+        gridVertexBuffer = ComputeHelper.CreateStructuredBuffer<float3>(numVertices);
         gridValueBuffer = ComputeHelper.CreateStructuredBuffer<float2>(numVertices);
-        cubesTriangleVerticesBuffer = ComputeHelper.CreateStructuredBuffer<float4>(15*numCubes);
+        cubesTriangleVerticesBuffer = ComputeHelper.CreateStructuredBuffer<float3>(15*numCubes);
         cubesTriangleTemperaturesBuffer = ComputeHelper.CreateStructuredBuffer<float>(15*numCubes);
         triangleMasksBuffer = ComputeHelper.CreateStructuredBuffer<int>(5*numCubes);
  
@@ -179,6 +185,12 @@ public class Simulation3D : MonoBehaviour
 
         // Init display
         display.Init(this);
+        cubesMat = new Material(mcshader);
+        cubesMat.SetBuffer("Vertices", cubesTriangleVerticesBuffer);
+        cubesMat.SetBuffer("Temperatures", cubesTriangleTemperaturesBuffer);
+        cubesMat.SetBuffer("Mask", triangleMasksBuffer);
+        cubesMat.SetTexture("ColourMap", display.gradientTexture);
+        bounds = new Bounds(Vector3.zero, Vector3.one * 10000);
     }
 
     void FixedUpdate()
@@ -187,10 +199,6 @@ public class Simulation3D : MonoBehaviour
         if (fixedTimeStep)
         {
             RunSimulationFrame(Time.fixedDeltaTime);
-        }
-        if(display.marchingCubesRendering)
-        {
-            UpdateMesh();
         }
     }
 
@@ -211,10 +219,6 @@ public class Simulation3D : MonoBehaviour
         floorDisplay.transform.localScale = new Vector3(1, 1 / transform.localScale.y * 0.1f, 1);
         thermostatPosition = thermostat.transform.position;
         HandleInput();
-        if(display.marchingCubesRendering)
-        {
-            UpdateMesh();
-        }
     }
 
     void RunSimulationFrame(float frameTime)
@@ -231,7 +235,11 @@ public class Simulation3D : MonoBehaviour
                 SimulationStepCompleted?.Invoke();
             }
         }
-    }
+
+    }    
+    
+
+  
 
     void RunSimulationStep(float deltaTime)
     {
@@ -284,8 +292,10 @@ public class Simulation3D : MonoBehaviour
         ComputeHelper.Dispatch(compute, temperatureBuffer.count, kernelIndex: updateTemperatureKernel);
 
         ComputeHelper.Dispatch(compute, temperatureBuffer.count, kernelIndex: densityKernel);
-        ComputeHelper.Dispatch(compute, gridValueBuffer.count, kernelIndex: evaluateGridKernel);
-        ComputeHelper.Dispatch(compute, gridValueBuffer.count, kernelIndex: marchingCubesKernel);
+        ComputeHelper.Dispatch(compute, temperatureBuffer.count, kernelIndex: stateVariablesKernel);
+        ComputeHelper.Dispatch(compute, numVertices, kernelIndex: evaluateGridKernel);
+        ComputeHelper.Dispatch(compute, numCubes, kernelIndex: marchingCubesKernel);
+        Graphics.DrawProcedural(cubesMat, bounds, MeshTopology.Triangles, numCubes*15);
 
     }
 
@@ -313,6 +323,9 @@ public class Simulation3D : MonoBehaviour
         compute.SetVector("thermostatPosition", thermostatPosition);
         compute.SetInt("stateVariablesStride",stateVariablesBufferStride);
         compute.SetInt("constantsBufferStride",constantsBufferStride);
+        compute.SetInt("dimX",Nx);
+        compute.SetInt("dimY",Ny);
+        compute.SetInt("dimZ",Nz);
         compute.SetFloat("isoDensity",isoDensity);
 
 
@@ -371,36 +384,22 @@ public class Simulation3D : MonoBehaviour
         Gizmos.color = new Color(0, 1, 0, 0.5f);
         Gizmos.DrawWireCube(Vector3.zero, Vector3.one);
         Gizmos.matrix = m;
+        if (!Application.isPlaying || !drawGrid) return;
+        Gizmos.color = new Color(0, 0, 0, 0.5f);
+        for(int i = 0; i < Nx; i++)
+        {
+            for(int j = 0; j < Ny; j++)
+            {
+                for(int k = 0; k < Nz; k++)
+                {
+                    float3 p = new float3();
+                    p = spawnData.gridPositions[i + Nx * j + Nx * Ny * k];
+                    Gizmos.DrawSphere(p, 0.03f);
+                }
+                
+            }
+        }
 
     }
-    void UpdateMesh()
-    {
-        // float4[] verticesCoords = new float4[15*numVertices];
-        // float[] verticesTemperatures = new float[15*numVertices];
-        // int[] trianglesCount = new int[numVertices];
 
-        // cubesTriangleVerticesBuffer.GetData(verticesCoords);
-        // cubesTriangleTemperaturesBuffer.GetData(verticesTemperatures);
-        // triangleCountBuffer.GetData(triangleCount);
-
-        // List<float4>  verticesCoordsCleant = new List<float4>();
-        // List<float>  verticesTemperaturesCleant = new List<float>();
-
-        // for(int i = 0; i<numVertices; i++)
-        // {
-        //     for(int j = 0; j<trianglesCount[i]; j++)
-        //     {
-        //         int tmp = i*15+3*j;
-        //         for(int k=3; k<3; k++)
-        //         {
-        //             verticesCoordsCleant.Add(verticesCoords[tmp+k]);
-        //             verticesTemperaturesCleant.Add(verticesTemperatures[tmp+k]);
-        //         }
-        //     }
-        // }
-
-
-
-
-    }
 }

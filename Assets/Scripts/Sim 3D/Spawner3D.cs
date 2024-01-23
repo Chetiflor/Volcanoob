@@ -22,7 +22,7 @@ public class Spawner3D : MonoBehaviour
     {
         int numPoints = numParticlesPerAxis * numParticlesPerAxis * numParticlesPerAxis;
 
-        float4[] gridPositions =new float4[Nx*Ny*Nz];
+        float3[] gridPositions =new float3[Nx*Ny*Nz];
         float3[] positionsVelocities =new float3[2*numPoints];
         float[] temperatures = new float[numPoints];
         float[] constants = new float[numPoints * constantsBufferStride];
@@ -103,7 +103,7 @@ public class Spawner3D : MonoBehaviour
                     float py = (ty - 0.5f) * size + centre.y;
                     float pz = (tz - 0.5f) * size + centre.z;
 
-                    gridPositions[z*Nx*Ny + y*Nx + x] = new float4(px,py,pz,1);
+                    gridPositions[z*Nx*Ny + y*Nx + x] = new float3(px,py,pz);
 
                     i++;
                 }
@@ -116,7 +116,7 @@ public class Spawner3D : MonoBehaviour
     public struct SpawnData
     {
         public float3[] positionsVelocities;
-        public float4[] gridPositions;
+        public float3[] gridPositions;
         public float[] temperatures;
         public float[] constants;
         public float[] stateVariables;

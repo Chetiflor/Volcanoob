@@ -8,25 +8,22 @@ public class ParticleDisplay3D : MonoBehaviour
     public Shader mcshader;
     public float scale;
     Mesh mesh;
-    Mesh mcMesh;
     public Color col;
     Material mat;
     Material cubesMat;
-
     ComputeBuffer argsBuffer;
     Bounds bounds;
-    CommandBuffer mcCommandBuffer;
 
     public Gradient colourMap;
     public int gradientResolution;
     public float velocityDisplayMax;
-    Texture2D gradientTexture;
+    public Texture2D gradientTexture;
     bool needsUpdate;
 
     public bool marchingCubesRendering=true;
     public int meshResolution;
     public int debug_MeshTriCount;
-    int numCubes;
+    int numTriangleVertices;
 
     public void Init(Simulation3D sim)
     {
@@ -40,8 +37,7 @@ public class ParticleDisplay3D : MonoBehaviour
         argsBuffer = ComputeHelper.CreateArgsBuffer(mesh, sim.positionVelocityBuffer.count/2);
         bounds = new Bounds(Vector3.zero, Vector3.one * 10000);
 
-        mcCommandBuffer = new CommandBuffer();
-        numCubes = sim.numCubes;
+        numTriangleVertices = sim.numCubes*5*3;
         cubesMat = new Material(mcshader);
         cubesMat.SetBuffer("Vertices", sim.cubesTriangleVerticesBuffer);
         cubesMat.SetBuffer("Temperatures", sim.cubesTriangleTemperaturesBuffer);
@@ -60,9 +56,10 @@ public class ParticleDisplay3D : MonoBehaviour
         }
         else
         {
-            mcCommandBuffer.DrawProcedural(Matrix4x4.Translate(new Vector3(0,0,0)), cubesMat, 0, MeshTopology.Triangles,  numCubes);
+            //Graphics.DrawProcedural(cubesMat, bounds, MeshTopology.Triangles, numTriangleVertices);
         }
     }
+
 
     void UpdateSettings()
     {
@@ -71,6 +68,7 @@ public class ParticleDisplay3D : MonoBehaviour
             needsUpdate = false;
             ParticleDisplay2D.TextureFromGradient(ref gradientTexture, gradientResolution, colourMap);
             mat.SetTexture("ColourMap", gradientTexture);
+            cubesMat.SetTexture("ColourMap", gradientTexture);
         }
         mat.SetFloat("scale", scale);
         mat.SetColor("colour", col);
@@ -82,7 +80,18 @@ public class ParticleDisplay3D : MonoBehaviour
         transform.localScale = s;
 
         mat.SetMatrix("localToWorld", localToWorld);
+        cubesMat.SetMatrix("localToWorld", localToWorld);
     }
+
+    // void OnDrawGizmos()
+    // {
+    //     if(marchingCubesRendering && Application.isPlaying)
+    //     {
+    //         cubesMat.SetPass(0);
+    //         Graphics.DrawProceduralNow(MeshTopology.Triangles, numTriangleVertices);
+    //     }
+        
+    // }
 
     private void OnValidate()
     {
@@ -93,4 +102,6 @@ public class ParticleDisplay3D : MonoBehaviour
     {
         ComputeHelper.Release(argsBuffer);
     }
+
+    
 }
