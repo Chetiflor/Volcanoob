@@ -5,13 +5,16 @@ public class ParticleDisplay3D : MonoBehaviour
 {
 
     public Shader shader;
+    public Shader gridshader;
     public Shader mcshader;
     public float scale;
     Mesh mesh;
     public Color col;
     Material mat;
+    Material gridMat;
     Material cubesMat;
     ComputeBuffer argsBuffer;
+    ComputeBuffer gridArgsBuffer;
     Bounds bounds;
 
     public Gradient colourMap;
@@ -21,6 +24,7 @@ public class ParticleDisplay3D : MonoBehaviour
     bool needsUpdate;
 
     public bool marchingCubesRendering=true;
+    public bool drawGridVertices=false;
     public int meshResolution;
     public int debug_MeshTriCount;
     int numTriangleVertices;
@@ -36,6 +40,11 @@ public class ParticleDisplay3D : MonoBehaviour
         debug_MeshTriCount = mesh.triangles.Length / 3;
         argsBuffer = ComputeHelper.CreateArgsBuffer(mesh, sim.positionVelocityBuffer.count/2);
         bounds = new Bounds(Vector3.zero, Vector3.one * 10000);
+
+        gridMat = new Material(gridshader);
+        gridMat.SetBuffer("GridVertices", sim.gridVertexBuffer);
+        mesh = SebStuff.SphereGenerator.GenerateSphereMesh(meshResolution);
+        gridArgsBuffer = ComputeHelper.CreateArgsBuffer(mesh, sim.gridVertexBuffer.count);
 
         numTriangleVertices = sim.numCubes*5*3;
         cubesMat = new Material(mcshader);
@@ -54,10 +63,10 @@ public class ParticleDisplay3D : MonoBehaviour
         {
             Graphics.DrawMeshInstancedIndirect(mesh, 0, mat, bounds, argsBuffer);
         }
-        else
-        {
-            //Graphics.DrawProcedural(cubesMat, bounds, MeshTopology.Triangles, numTriangleVertices);
-        }
+            if(drawGridVertices)
+            {
+                Graphics.DrawMeshInstancedIndirect(mesh, 0, gridMat, bounds, gridArgsBuffer);
+            }
     }
 
 
@@ -71,7 +80,9 @@ public class ParticleDisplay3D : MonoBehaviour
             cubesMat.SetTexture("ColourMap", gradientTexture);
         }
         mat.SetFloat("scale", scale);
+        gridMat.SetFloat("scale", scale/5);
         mat.SetColor("colour", col);
+        gridMat.SetColor("colour", col);
         mat.SetFloat("velocityMax", velocityDisplayMax);
 
         Vector3 s = transform.localScale;
@@ -80,6 +91,7 @@ public class ParticleDisplay3D : MonoBehaviour
         transform.localScale = s;
 
         mat.SetMatrix("localToWorld", localToWorld);
+        gridMat.SetMatrix("localToWorld", localToWorld);
         cubesMat.SetMatrix("localToWorld", localToWorld);
     }
 

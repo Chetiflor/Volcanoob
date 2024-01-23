@@ -114,6 +114,7 @@ public class Simulation3D : MonoBehaviour
         spawner.Nx = Nx;
         spawner.Ny = Ny;
         spawner.Nz = Nz;
+        spawner.simTransform = transform;
 
 
         spawnData = spawner.GetSpawnData();
@@ -172,8 +173,8 @@ public class Simulation3D : MonoBehaviour
 
         ComputeHelper.SetBuffer(compute, gridVertexBuffer, "GridVertices", evaluateGridKernel, marchingCubesKernel);
         ComputeHelper.SetBuffer(compute, gridValueBuffer, "GridValues", evaluateGridKernel, marchingCubesKernel);
-        ComputeHelper.SetBuffer(compute, cubesTriangleVerticesBuffer, "CubesTrianglesTemperatures", marchingCubesKernel);
-        ComputeHelper.SetBuffer(compute, cubesTriangleTemperaturesBuffer, "CubesTrianglesVertices", marchingCubesKernel);
+        ComputeHelper.SetBuffer(compute, cubesTriangleTemperaturesBuffer, "CubesTrianglesTemperatures", marchingCubesKernel);
+        ComputeHelper.SetBuffer(compute, cubesTriangleVerticesBuffer, "CubesTrianglesVertices", marchingCubesKernel);
         ComputeHelper.SetBuffer(compute, triangleMasksBuffer, "TriangleMasks", marchingCubesKernel);
 
         compute.SetInt("numParticles", temperatureBuffer.count);
@@ -189,7 +190,6 @@ public class Simulation3D : MonoBehaviour
         cubesMat.SetBuffer("Vertices", cubesTriangleVerticesBuffer);
         cubesMat.SetBuffer("Temperatures", cubesTriangleTemperaturesBuffer);
         cubesMat.SetBuffer("Mask", triangleMasksBuffer);
-        cubesMat.SetTexture("ColourMap", display.gradientTexture);
         bounds = new Bounds(Vector3.zero, Vector3.one * 10000);
     }
 
@@ -295,7 +295,10 @@ public class Simulation3D : MonoBehaviour
         ComputeHelper.Dispatch(compute, temperatureBuffer.count, kernelIndex: stateVariablesKernel);
         ComputeHelper.Dispatch(compute, numVertices, kernelIndex: evaluateGridKernel);
         ComputeHelper.Dispatch(compute, numCubes, kernelIndex: marchingCubesKernel);
+        if(!display.marchingCubesRendering) return;
         Graphics.DrawProcedural(cubesMat, bounds, MeshTopology.Triangles, numCubes*15);
+        // cubesMat.SetPass(0);
+        // Graphics.DrawProceduralNow(MeshTopology.Triangles,numCubes*15,1);
 
     }
 
@@ -327,6 +330,8 @@ public class Simulation3D : MonoBehaviour
         compute.SetInt("dimY",Ny);
         compute.SetInt("dimZ",Nz);
         compute.SetFloat("isoDensity",isoDensity);
+        cubesMat.SetTexture("ColourMap", display.gradientTexture);
+        
 
 
         compute.SetMatrix("localToWorld", transform.localToWorldMatrix);
@@ -384,21 +389,7 @@ public class Simulation3D : MonoBehaviour
         Gizmos.color = new Color(0, 1, 0, 0.5f);
         Gizmos.DrawWireCube(Vector3.zero, Vector3.one);
         Gizmos.matrix = m;
-        if (!Application.isPlaying || !drawGrid) return;
-        Gizmos.color = new Color(0, 0, 0, 0.5f);
-        for(int i = 0; i < Nx; i++)
-        {
-            for(int j = 0; j < Ny; j++)
-            {
-                for(int k = 0; k < Nz; k++)
-                {
-                    float3 p = new float3();
-                    p = spawnData.gridPositions[i + Nx * j + Nx * Ny * k];
-                    Gizmos.DrawSphere(p, 0.03f);
-                }
-                
-            }
-        }
+        
 
     }
 

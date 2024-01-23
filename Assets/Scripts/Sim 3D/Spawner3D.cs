@@ -14,6 +14,7 @@ public class Spawner3D : MonoBehaviour
     public int constantsBufferStride;
     public int stateVariablesBufferStride;
     public int Nx,Ny,Nz;
+    public Transform simTransform;
 
     [Header("Info")]
     public int debug_numParticles;
@@ -43,6 +44,10 @@ public class Spawner3D : MonoBehaviour
                     float px = (tx - 0.5f) * size + centre.x;
                     float py = (ty - 0.5f) * size + centre.y;
                     float pz = (tz - 0.5f) * size + centre.z;
+
+                    // float px = (tx - 0.5f) * simTransform.localScale.x + simTransform.position.x;
+                    // float py = (ty - 0.5f) * simTransform.localScale.y + simTransform.position.y;
+                    // float pz = (tz - 0.5f) * simTransform.localScale.z + simTransform.position.z;
 
                     float3 jitter = UnityEngine.Random.insideUnitSphere * jitterStrength;
                     positionsVelocities[2*i] = new float3(px, py, pz) + jitter;
@@ -99,11 +104,17 @@ public class Spawner3D : MonoBehaviour
                     float ty = y / (Ny - 1f);
                     float tz = z / (Nz - 1f);
 
+                    // float px = (tx - 0.5f) * simTransform.localScale.x + simTransform.position.x;
+                    // float py = (ty - 0.5f) * simTransform.localScale.y + simTransform.position.y;
+                    // float pz = (tz - 0.5f) * simTransform.localScale.z + simTransform.position.z;
+
                     float px = (tx - 0.5f) * size + centre.x;
                     float py = (ty - 0.5f) * size + centre.y;
                     float pz = (tz - 0.5f) * size + centre.z;
 
-                    gridPositions[z*Nx*Ny + y*Nx + x] = new float3(px,py,pz);
+                    float3 pos = new float3(px,py,pz);
+
+                    gridPositions[z*Nx*Ny + y*Nx + x] = pos;
 
                     i++;
                 }

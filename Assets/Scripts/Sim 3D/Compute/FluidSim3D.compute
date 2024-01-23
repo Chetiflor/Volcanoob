@@ -571,8 +571,10 @@ void CalculateDeltasTemperature(uint3 id : SV_DispatchThreadID)
 void EvaluateGrid(uint3 id : SV_DispatchThreadID)
 {
 	float3 pos = GridVertices[id.x];
-	int3 originCell = GetCell3D(pos, smoothingRadius);
-	float sqrRadius = smoothingRadius * smoothingRadius;
+	float multiplier = 8;
+	float longRadius = smoothingRadius * multiplier;
+	int3 originCell = GetCell3D(pos, 4*longRadius);
+	float sqrRadius = longRadius * longRadius;
 
 	float density = 0;
 	float temperature = 0;
@@ -610,7 +612,7 @@ void EvaluateGrid(uint3 id : SV_DispatchThreadID)
 			float temperatureNeighour = Temperatures[neighbourIndex];
 			float neighbourVolumicMass = StateVariables[neighbourIndex * stateVariablesStride + 5];
 
-			float tmp = SmoothingKernelPoly6(dst, smoothingRadius) * neighbourVolumicMass ; 
+			float tmp = DensityKernel(dst, longRadius) * neighbourVolumicMass ; 
 			density += tmp;
 			temperature += tmp * temperatureNeighour / densityNeighbour;
 
@@ -626,18 +628,31 @@ void EvaluateGrid(uint3 id : SV_DispatchThreadID)
 void MarchingCubes(uint3 id : SV_DispatchThreadID)
 {
 
-
-	int test = id.x*15;
-	for(int i=0; i<15;i++)
-	{
-		CubesTrianglesTemperatures[test + i] = 600.0f;
-	}
-	return;
-	float cubeSize = smoothingRadius;
-
 	int deltaX = 1;
 	int deltaY = dimX;
 	int deltaZ = dimX * dimY;
+	bool onSideX = (id.x/deltaX)%dimX == dimX - 1;
+	bool onSideY = (id.x/deltaY)%dimY == dimY - 1;
+	bool onSideZ = (id.x/deltaZ)%dimZ == dimZ - 1;
+
+	int maskIndex = 5 * id.x;		
+	for(int i = 0; i < 5; i++)
+	{
+		TriangleMasks[maskIndex+i] = 0;
+	}
+
+	if(onSideX || onSideY || onSideZ)
+	{
+		return;
+	}
+	int test = id.x*15;
+	// for(int i=0; i<15;i++)
+	// {
+	// 	CubesTrianglesTemperatures[test + i] = 600.0f;
+	// }
+	float cubeSize = smoothingRadius;
+
+
 
 	float2 gridValues[8];
 	float3 gridVertices[8];
@@ -693,12 +708,7 @@ void MarchingCubes(uint3 id : SV_DispatchThreadID)
 	if ((edgeMask & 1024) > 0) vertList[10] = interpolate(gridVerticesTemperatures[2],gridVerticesTemperatures[6],gridValues[2],gridValues[6],isoDensity);
 	if ((edgeMask & 2048) > 0) vertList[11] = interpolate(gridVerticesTemperatures[3],gridVerticesTemperatures[7],gridValues[3],gridValues[7],isoDensity);
 	
-	int tmp = 5 * id.x;
-	TriangleMasks[tmp + 0] = 0;
-	TriangleMasks[tmp + 1] = 0;
-	TriangleMasks[tmp + 2] = 0;
-	TriangleMasks[tmp + 3] = 0;
-	TriangleMasks[tmp + 4] = 0;
+
 	for (int i = 0; triangleTable[cubeIndex][i] != -1; i += 3)
 	{
 		int tmpIndex = 15*id.x+i*3;
@@ -708,10 +718,7 @@ void MarchingCubes(uint3 id : SV_DispatchThreadID)
 		CubesTrianglesTemperatures[tmpIndex + 0] = vertList[triangleTable[cubeIndex][i + 0]].w;
 		CubesTrianglesTemperatures[tmpIndex + 1] = vertList[triangleTable[cubeIndex][i + 1]].w;
 		CubesTrianglesTemperatures[tmpIndex + 2] = vertList[triangleTable[cubeIndex][i + 2]].w;
-		// CubesTrianglesTemperatures[tmpIndex + 0] = id.x/1273.0f;
-		// CubesTrianglesTemperatures[tmpIndex + 1] = id.x/1273.0f;
-		// CubesTrianglesTemperatures[tmpIndex + 2] = id.x/1273.0f;
-		TriangleMasks[tmpIndex/3] = 1;
+		TriangleMasks[maskIndex + i] = 1;
 	}
 
 }

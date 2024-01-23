@@ -38,7 +38,7 @@ RenderSettings:
   m_ReflectionIntensity: 1
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 0}
-  m_IndirectSpecularColor: {r: 0.44923288, g: 0.49930394, b: 0.57571286, a: 1}
+  m_IndirectSpecularColor: {r: 0.4492445, g: 0.49931413, b: 0.57571995, a: 1}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -281,16 +281,19 @@ MonoBehaviour:
   thermostatConductivity: 1000
   athmospherePressure: 100000
   airDensity: 1.3
-  Nx: 10
-  Ny: 10
-  Nz: 10
+  Nx: 3
+  Ny: 4
+  Nz: 5
   numVertices: 0
+  numCubes: 0
+  drawGrid: 0
   compute: {fileID: 7200000, guid: 9443696acfd0ebe4fb503b56d952256c, type: 3}
   spawner: {fileID: 271053323}
   display: {fileID: 271053320}
   floorDisplay: {fileID: 620375868}
   thermostat: {fileID: 1230015180}
-  isoDensity: 1
+  isoDensity: 1100
+  mcshader: {fileID: 4800000, guid: 0487c824a6f1b83b7b706e040632a61a, type: 3}
 --- !u!114 &271053320
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -339,6 +342,7 @@ MonoBehaviour:
     m_NumAlphaKeys: 2
   gradientResolution: 50
   velocityDisplayMax: 6
+  gradientTexture: {fileID: 0}
   marchingCubesRendering: 1
   meshResolution: 3
   debug_MeshTriCount: 2
@@ -362,7 +366,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: f99a384512b94654fbeb7c06c43f81ba, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  numParticlesPerAxis: 35
+  numParticlesPerAxis: 25
   centre: {x: 0, y: -0.47, z: 0}
   size: 3.7
   initialVel:
@@ -375,7 +379,10 @@ MonoBehaviour:
   molesByParticle: 0
   constantsBufferStride: 0
   stateVariablesBufferStride: 0
-  debug_numParticles: 42875
+  Nx: 0
+  Ny: 0
+  Nz: 0
+  debug_numParticles: 15625
 --- !u!1 &620375867
 GameObject:
   m_ObjectHideFlags: 0
@@ -544,7 +551,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 963194225}
   m_LocalRotation: {x: 0.040845454, y: -0, z: -0, w: 0.9991655}
-  m_LocalPosition: {x: 0, y: 0.76, z: -8.244}
+  m_LocalPosition: {x: 0, y: 0.75999993, z: -8.244}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
