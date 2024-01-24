@@ -53,11 +53,11 @@ public class Spawner3D : MonoBehaviour
                     positionsVelocities[2*i] = new float3(px, py, pz) + jitter;
                     positionsVelocities[2*i+1] = initialVel;
 
-                    temperatures[i] = 1273;
+                    temperatures[i] = 1273*ty;
 
                     // water
 
-                    float viscosity = 1000.0f;
+                    float viscosity = 100.0f;
                     float thermicConductivity = 30000f;
                     float thermicCapacity = 0.4185f;
                     float molarMass = 0.018f; // molar mass

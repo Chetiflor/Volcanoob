@@ -240,9 +240,9 @@ float sigmoid(float x)
 float ViscosityFromTemperature(float basicViscosity, float temperature)
 {
 	float constantPortion = 10;
-	float variablePortion = -9.5;	
-	float center = 700;
-	float scale = 120;
+	float variablePortion = -9.8;	
+	float center = 650;
+	float scale = 50;
 	
 	return (constantPortion+variablePortion*sigmoid((temperature-center)/scale))*basicViscosity/(constantPortion+max(variablePortion,0));
 }
@@ -252,7 +252,7 @@ float ConductivityFromTemperature(float basicConductivity, float temperature)
 	float constantPortion = 5;
 	float variablePortion = 5;	
 	float center = 600;
-	float scale = 400;
+	float scale = 100;
 	
 	return (constantPortion+variablePortion*sigmoid((temperature-center)/scale))*basicConductivity/(constantPortion+max(variablePortion,0));
 }
@@ -402,7 +402,6 @@ void CalculateLaplacians (uint3 id : SV_DispatchThreadID)
 	{
 		for(int i = 0; i<2;i++)
 		{
-
 		
 			int3 currOffset = (0,0,0);
 			int sign=2*i-1;
@@ -411,6 +410,7 @@ void CalculateLaplacians (uint3 id : SV_DispatchThreadID)
 			float3 adjacentVelocity = (0,0,0);
 			//float adjacentPressure = 0;
 			float adjacentTemperature = 0;
+			float sumDst = 0;
 
 			int3 offsetCell = GetCell3D(pos + currOffset*dx, longRadius);
 			for (int j = 0; j < 27; j ++)
@@ -418,6 +418,7 @@ void CalculateLaplacians (uint3 id : SV_DispatchThreadID)
 				uint hash = HashCell3D(offsetCell  + offsets3D[j]);
 				uint key = KeyFromHash(hash, numParticles);
 				int currIndex = SpatialOffsetsLong[key];
+				bool foundNeighbour=false;
 				while (currIndex < numParticles)
 				{
 					uint3 indexData = SpatialIndicesLong[currIndex];
@@ -446,16 +447,15 @@ void CalculateLaplacians (uint3 id : SV_DispatchThreadID)
 					float neighbourVolumicMass = StateVariables[tmpIndex + 5];
 
 					float tmp =  SmoothingKernelPoly6(dst, longRadius) / neighbourDensity * neighbourVolumicMass;
-
-					adjacentVelocity += neighbourVelocity * tmp;
-					adjacentTemperature += neighbourTemperature * tmp;
+					adjacentTemperature += neighbourTemperature * dst;
+					sumDst += dst;
 					//adjacentPressure += neighbourPressure * tmp;
 
 				}
 
 
 			}
-			temperatureLaplacian += (adjacentTemperature-temperature) ;
+			temperatureLaplacian += (adjacentTemperature/sumDst-temperature) ;
 			//pressureGradient[dim] += sign*adjacentPressure;
 			convectiveTerm += sign*(adjacentVelocity)*velocity[dim];
 			velocityLaplacian += (adjacentVelocity-velocity);
