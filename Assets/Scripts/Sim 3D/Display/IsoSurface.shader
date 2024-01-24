@@ -72,7 +72,6 @@ Shader "IsoSurface"
 	{
 		float4 vertex : SV_POSITION;
         float temperature : TEXCOORD0;
-        // float toDraw: TEXCOORD1;
 	};
 	
 	StructuredBuffer<float3> Vertices;
@@ -86,7 +85,6 @@ Shader "IsoSurface"
 		ToFrag o;
 		o.vertex = mul(UNITY_MATRIX_VP,( float4(Vertices[vi],1) ));
 		o.temperature =  Temperatures[vi] ;
-        // o.pos = mul(UNITY_MATRIX_VP,float4(sin(vid*10),sin(vid*200),sin(vid*3000),1));
         if (Mask[vi/3] == 0)
         {
             o.vertex = float4(0,0,0,1);
@@ -97,8 +95,8 @@ Shader "IsoSurface"
 	
 	fixed4 Frag( ToFrag i ) : SV_Target
 	{
-        fixed4 colour = tex2Dlod(ColourMap, float4(i.temperature, 0.5,0,0));
-		return colour; // Yellow
+        fixed4 colour = tex2Dlod(ColourMap, float4(5*i.temperature/2346, 1,0,0));
+		return colour; 
 	}
 	
 	ENDCG

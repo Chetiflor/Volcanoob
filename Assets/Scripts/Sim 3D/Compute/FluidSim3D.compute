@@ -30,6 +30,8 @@ RWStructuredBuffer<float2> Densities; // Density, Near Density
 
 RWStructuredBuffer<uint3> SpatialIndices; // used for spatial hashing
 RWStructuredBuffer<uint> SpatialOffsets; // used for spatial hashing
+RWStructuredBuffer<uint3> SpatialIndicesLong; // used for spatial hashing
+RWStructuredBuffer<uint> SpatialOffsetsLong; // used for spatial hashing
 
 RWStructuredBuffer<float> Temperatures; 
 RWStructuredBuffer<float> PredictedTemperatures;
@@ -58,6 +60,7 @@ const float gravity;
 const float deltaTime;
 const float collisionDamping;
 const float smoothingRadius;
+const float longRadius;
 const float targetDensity;
 const float pressureMultiplier;
 const float nearPressureMultiplier;
@@ -160,15 +163,23 @@ void ExternalForces (uint3 id : SV_DispatchThreadID)
 void UpdateSpatialHash (uint3 id : SV_DispatchThreadID)
 {
 	if (id.x >= numParticles) return;
+	uint index = id.x;
 
 	// Reset offsets
 	SpatialOffsets[id.x] = numParticles;
 	// Update index buffer
-	uint index = id.x;
 	int3 cell = GetCell3D(PredictedPositionsVelocities[2*index], smoothingRadius);
 	uint hash = HashCell3D(cell);
 	uint key = KeyFromHash(hash, numParticles);
 	SpatialIndices[id.x] = uint3(index, hash, key);
+
+	// Reset offsets
+	SpatialOffsetsLong[id.x] = numParticles;
+	// Update index buffer
+	cell = GetCell3D(PredictedPositionsVelocities[2*index], longRadius);
+	hash = HashCell3D(cell);
+	key = KeyFromHash(hash, numParticles);
+	SpatialIndicesLong[id.x] = uint3(index, hash, key);
 }
 
 [numthreads(NumThreads,1,1)]
@@ -213,7 +224,7 @@ void CalculateDensity (uint3 id : SV_DispatchThreadID)
 			float neighbourVolumicMass = StateVariables[stateVariablesStride * neighbourIndex + 5];
 			
 			density += DensityKernel(dst, smoothingRadius)  * neighbourVolumicMass;
-			nearDensity += NearDensityKernel(dst, smoothingRadius) * neighbourVolumicMass;
+			nearDensity += SmoothingKernelPoly6(dst, smoothingRadius) * neighbourVolumicMass;
 		}
 	}
 	Densities[id.x] = float2(density, nearDensity);
@@ -229,8 +240,8 @@ float sigmoid(float x)
 float ViscosityFromTemperature(float basicViscosity, float temperature)
 {
 	float constantPortion = 10;
-	float variablePortion = -9;	
-	float center = 800;
+	float variablePortion = -9.5;	
+	float center = 700;
 	float scale = 120;
 	
 	return (constantPortion+variablePortion*sigmoid((temperature-center)/scale))*basicViscosity/(constantPortion+max(variablePortion,0));
@@ -239,7 +250,7 @@ float ViscosityFromTemperature(float basicViscosity, float temperature)
 float ConductivityFromTemperature(float basicConductivity, float temperature)
 {
 	float constantPortion = 5;
-	float variablePortion = 2;	
+	float variablePortion = 5;	
 	float center = 600;
 	float scale = 400;
 	
@@ -366,11 +377,11 @@ void CalculateLaplacians (uint3 id : SV_DispatchThreadID)
 	if (id.x >= numParticles) return;
 		
 	float3 pos = PredictedPositionsVelocities[2*id.x];
-	int3 originCell = GetCell3D(pos, smoothingRadius);
-	float sqrRadius = smoothingRadius * smoothingRadius;
+	int3 originCell = GetCell3D(pos, longRadius);
+	float sqrRadius = longRadius * longRadius;
 	float sqrDx = dx * dx;
 	
-	float density = Densities[id.x][0];
+	float density = Densities[id.x][1];
 	float volInv = Densities[id.x][1];
 	float3 velocity = PredictedPositionsVelocities[2*id.x+1];
 	float temperature = PredictedTemperatures[id.x];
@@ -401,15 +412,15 @@ void CalculateLaplacians (uint3 id : SV_DispatchThreadID)
 			//float adjacentPressure = 0;
 			float adjacentTemperature = 0;
 
-			int3 offsetCell = GetCell3D(pos + currOffset*dx, smoothingRadius);
+			int3 offsetCell = GetCell3D(pos + currOffset*dx, longRadius);
 			for (int j = 0; j < 27; j ++)
 			{	
 				uint hash = HashCell3D(offsetCell  + offsets3D[j]);
 				uint key = KeyFromHash(hash, numParticles);
-				int currIndex = SpatialOffsets[key];
+				int currIndex = SpatialOffsetsLong[key];
 				while (currIndex < numParticles)
 				{
-					uint3 indexData = SpatialIndices[currIndex];
+					uint3 indexData = SpatialIndicesLong[currIndex];
 					currIndex ++;
 					// Exit if no longer looking at correct bin
 					if (indexData[2] != key) break;
@@ -427,14 +438,14 @@ void CalculateLaplacians (uint3 id : SV_DispatchThreadID)
 					// Calculate viscosity
 					float dst = sqrt(sqrDstToNeighbour);
 
-					float neighbourDensity = Densities[neighbourIndex][0];
+					float neighbourDensity = Densities[neighbourIndex][1];
 					float3 neighbourVelocity = PredictedPositionsVelocities[2*neighbourIndex+1];
 					float neighbourTemperature = PredictedTemperatures[neighbourIndex];
 					tmpIndex = stateVariablesStride*neighbourIndex;
 					float neighbourPressure = StateVariables[tmpIndex];
 					float neighbourVolumicMass = StateVariables[tmpIndex + 5];
 
-					float tmp =  DensityKernel(dst, smoothingRadius) / neighbourDensity * neighbourVolumicMass;
+					float tmp =  SmoothingKernelPoly6(dst, longRadius) / neighbourDensity * neighbourVolumicMass;
 
 					adjacentVelocity += neighbourVelocity * tmp;
 					adjacentTemperature += neighbourTemperature * tmp;
@@ -472,8 +483,8 @@ void UpdateSpatial(uint3 id : SV_DispatchThreadID)
 	RK4Accelerations[4*id.x+2]=0;
 	RK4Accelerations[4*id.x+3]=0;
 	ResolveCollisions(id.x);
-	PredictedPositionsVelocities[2*id.x]=PositionsVelocities[2*id.x];
-	PredictedPositionsVelocities[2*id.x+1]=PositionsVelocities[2*id.x+1];
+	PredictedPositionsVelocities[2*id.x]=PositionsVelocities[2*id.x]+float3(0,gravity,0)*deltaTime;
+	PredictedPositionsVelocities[2*id.x+1]=PositionsVelocities[2*id.x+1] + PositionsVelocities[2*id.x]*deltaTime;
 }
 
 [numthreads(NumThreads, 1, 1)]
@@ -505,7 +516,6 @@ void CalculateDeltasTemperature(uint3 id : SV_DispatchThreadID)
 	float volumicMass = StateVariables[stateVariablesStride * id.x + 5];
 	float temperature = PredictedTemperatures[id.x];
 	
-	float longRadius = smoothingRadius * 5;
 
 	int3 originCell = GetCell3D(pos, longRadius);
 	float sqrRadius = longRadius * longRadius;
@@ -518,12 +528,12 @@ void CalculateDeltasTemperature(uint3 id : SV_DispatchThreadID)
 	{
 		uint hash = HashCell3D(originCell + offsets3D[i]);
 		uint key = KeyFromHash(hash, numParticles);
-		uint currIndex = SpatialOffsets[key];
+		uint currIndex = SpatialOffsetsLong[key];
 		bool foundNeighbourInCell = false;
 
 		while (currIndex < numParticles)
 		{
-			uint3 indexData = SpatialIndices[currIndex];
+			uint3 indexData = SpatialIndicesLong[currIndex];
 			currIndex ++;
 			// Exit if no longer looking at correct bin
 			if (indexData[2] != key) break;
@@ -557,8 +567,8 @@ void CalculateDeltasTemperature(uint3 id : SV_DispatchThreadID)
 		// }		
 		
 	}
-	float m = 100;
-	gradientTemperature-=100000/(1000.0f+foundNeighbours*foundNeighbours);
+	float m = 0.5;
+	gradientTemperature-=m*100000/(m*1.0f+sqrt(foundNeighbours));
 	uint tmpIndex = id.x * stateVariablesStride;
 	float conductivity = StateVariables[tmpIndex+3];
 	float capacity = StateVariables[tmpIndex+4];
@@ -571,9 +581,7 @@ void CalculateDeltasTemperature(uint3 id : SV_DispatchThreadID)
 void EvaluateGrid(uint3 id : SV_DispatchThreadID)
 {
 	float3 pos = GridVertices[id.x];
-	float multiplier = 10;
-	float longRadius = smoothingRadius * multiplier;
-	int3 originCell = GetCell3D(pos, 4*longRadius);
+	int3 originCell = GetCell3D(pos, longRadius);
 	float sqrRadius = longRadius * longRadius;
 
 	float density = 0;
@@ -584,11 +592,11 @@ void EvaluateGrid(uint3 id : SV_DispatchThreadID)
 	{
 		uint hash = HashCell3D(originCell + offsets3D[i]);
 		uint key = KeyFromHash(hash, numParticles);
-		uint currIndex = SpatialOffsets[key];
+		uint currIndex = SpatialOffsetsLong[key];
 
 		while (currIndex < numParticles)
 		{
-			uint3 indexData = SpatialIndices[currIndex];
+			uint3 indexData = SpatialIndicesLong[currIndex];
 			currIndex ++;
 			// Exit if no longer looking at correct bin
 			if (indexData[2] != key) break;
@@ -608,20 +616,20 @@ void EvaluateGrid(uint3 id : SV_DispatchThreadID)
 
 			float dst = max(sqrt(sqrDstToNeighbour),0.1);
 
-			float densityNeighbour = Densities[neighbourIndex][0];
+			float densityNeighbour = Densities[neighbourIndex][1];
 			float temperatureNeighour = Temperatures[neighbourIndex];
 			float neighbourVolumicMass = StateVariables[neighbourIndex * stateVariablesStride + 5];
 
-			float tmp = DensityKernel(dst, longRadius) * neighbourVolumicMass ; 
+			float tmp = SmoothingKernelPoly6(dst, longRadius) * neighbourVolumicMass ; 
 			density += tmp;
-			temperature += sqrDstToNeighbour * temperatureNeighour;
+			temperature += tmp * temperatureNeighour / densityNeighbour;
 			sumDst += sqrDstToNeighbour;
 
 		}
 		
 	}
 
-	GridValues[id.x] = float2(density,temperature/max(sumDst,0.00001));
+	GridValues[id.x] = float2(density,temperature);
 }
 
 
@@ -646,7 +654,7 @@ void MarchingCubes(uint3 id : SV_DispatchThreadID)
 	{
 		return;
 	}
-	int test = id.x*15;
+	// int test = id.x*15;
 	// for(int i=0; i<15;i++)
 	// {
 	// 	CubesTrianglesTemperatures[test + i] = 600.0f;
@@ -679,19 +687,19 @@ void MarchingCubes(uint3 id : SV_DispatchThreadID)
 
 	for (int i = 0; i<8; i++)
 	{
-		gridVerticesTemperatures[i] = float4(gridVertices[i],gridValues[i].y);
+		gridVerticesTemperatures[i] = float4(gridVertices[i],gridValues[i][1]);
 	}
 
 	
 	int cubeIndex = 0;
-	if (gridValues[0].x > isoDensity) cubeIndex |= 1;
-	if (gridValues[1].x > isoDensity) cubeIndex |= 2;
-	if (gridValues[2].x > isoDensity) cubeIndex |= 4;
-	if (gridValues[3].x > isoDensity) cubeIndex |= 8;
-	if (gridValues[4].x > isoDensity) cubeIndex |= 16;
-	if (gridValues[5].x > isoDensity) cubeIndex |= 32;
-	if (gridValues[6].x > isoDensity) cubeIndex |= 64;
-	if (gridValues[7].x > isoDensity) cubeIndex |= 128;
+	if (gridValues[0][0] > isoDensity) cubeIndex |= 1;
+	if (gridValues[1][0] > isoDensity) cubeIndex |= 2;
+	if (gridValues[2][0] > isoDensity) cubeIndex |= 4;
+	if (gridValues[3][0] > isoDensity) cubeIndex |= 8;
+	if (gridValues[4][0] > isoDensity) cubeIndex |= 16;
+	if (gridValues[5][0] > isoDensity) cubeIndex |= 32;
+	if (gridValues[6][0] > isoDensity) cubeIndex |= 64;
+	if (gridValues[7][0] > isoDensity) cubeIndex |= 128;
 
 	int edgeMask = edgeTable[cubeIndex];
 	float4 vertList[12];

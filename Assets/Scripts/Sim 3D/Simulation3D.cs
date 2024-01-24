@@ -18,6 +18,7 @@ public class Simulation3D : MonoBehaviour
     public float gravity = -10;
     [Range(0, 1)] public float collisionDamping = 0.05f;
     public float smoothingRadius = 0.2f;
+    public float smoothingRadiusLong = 0.2f;
     public float particleDimension = 0.002f;
     public float dx = 0.002f;
     public float targetDensity;
@@ -61,6 +62,8 @@ public class Simulation3D : MonoBehaviour
     const int constantsBufferStride = 8;
     ComputeBuffer spatialIndices;
     ComputeBuffer spatialOffsets;
+    ComputeBuffer spatialIndicesLong;
+    ComputeBuffer spatialOffsetsLong;
 
     public ComputeBuffer gridVertexBuffer;
     public ComputeBuffer gridValueBuffer;
@@ -88,6 +91,7 @@ public class Simulation3D : MonoBehaviour
     const int marchingCubesKernel = 11;
 
     GPUSort gpuSort;
+    GPUSort gpuSortLong;
 
     // State
     bool isPaused;
@@ -136,6 +140,9 @@ public class Simulation3D : MonoBehaviour
 
         spatialIndices = ComputeHelper.CreateStructuredBuffer<uint3>(numParticles);
         spatialOffsets = ComputeHelper.CreateStructuredBuffer<uint>(numParticles);
+
+        spatialIndicesLong = ComputeHelper.CreateStructuredBuffer<uint3>(numParticles);
+        spatialOffsetsLong = ComputeHelper.CreateStructuredBuffer<uint>(numParticles);
         
         stateVariableBuffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles*stateVariablesBufferStride);
         constantsBuffer = ComputeHelper.CreateStructuredBuffer<float>(numParticles*constantsBufferStride);
@@ -156,9 +163,12 @@ public class Simulation3D : MonoBehaviour
         ComputeHelper.SetBuffer(compute, positionVelocityBuffer, "PositionsVelocities", evaluateGridKernel, predictionKernel,  updateSpatialKernel);
         ComputeHelper.SetBuffer(compute, predictedPositionVelocityBuffer, "PredictedPositionsVelocities", deltaTemperatureKernel, stateVariablesKernel, predictionKernel, externalForcesKernel, spatialHashKernel, densityKernel, pressureForcesKernel, laplacianKernel, updateSpatialKernel);
 
+        ComputeHelper.SetBuffer(compute, spatialIndices, "SpatialIndices", spatialHashKernel, stateVariablesKernel, densityKernel, pressureForcesKernel);
+        ComputeHelper.SetBuffer(compute, spatialOffsets, "SpatialOffsets", spatialHashKernel, stateVariablesKernel, densityKernel, pressureForcesKernel);
 
-        ComputeHelper.SetBuffer(compute, spatialIndices, "SpatialIndices", deltaTemperatureKernel, evaluateGridKernel, spatialHashKernel, stateVariablesKernel, densityKernel, pressureForcesKernel, laplacianKernel);
-        ComputeHelper.SetBuffer(compute, spatialOffsets, "SpatialOffsets", deltaTemperatureKernel, evaluateGridKernel, spatialHashKernel, stateVariablesKernel, densityKernel, pressureForcesKernel, laplacianKernel);
+        ComputeHelper.SetBuffer(compute, spatialIndicesLong, "SpatialIndicesLong", spatialHashKernel, laplacianKernel, deltaTemperatureKernel, evaluateGridKernel);
+        ComputeHelper.SetBuffer(compute, spatialOffsetsLong, "SpatialOffsetsLong", spatialHashKernel, laplacianKernel, deltaTemperatureKernel, evaluateGridKernel);
+
         ComputeHelper.SetBuffer(compute, constantsBuffer, "Constants", stateVariablesKernel);
 
         ComputeHelper.SetBuffer(compute, densityBuffer, "Densities", deltaTemperatureKernel, evaluateGridKernel, externalForcesKernel, stateVariablesKernel, densityKernel, pressureForcesKernel, laplacianKernel);
@@ -166,7 +176,7 @@ public class Simulation3D : MonoBehaviour
 
         ComputeHelper.SetBuffer(compute, temperatureBuffer, "Temperatures", updateTemperatureKernel, evaluateGridKernel, deltaTemperatureKernel, predictionKernel);
         ComputeHelper.SetBuffer(compute, predictedTemperatureBuffer, "PredictedTemperatures", deltaTemperatureKernel, densityKernel, stateVariablesKernel, laplacianKernel,predictionKernel);
-        ComputeHelper.SetBuffer(compute, laplacianTemperatureBuffer, "TemperatureLaplacians", laplacianKernel);
+        ComputeHelper.SetBuffer(compute, laplacianTemperatureBuffer, "TemperatureLaplacians", deltaTemperatureKernel, laplacianKernel);
 
         ComputeHelper.SetBuffer(compute, RK4AccelerationBuffer, "RK4Accelerations", updateSpatialKernel, externalForcesKernel, pressureForcesKernel, laplacianKernel, predictionKernel);
         ComputeHelper.SetBuffer(compute, RK4HeatBuffer, "RK4TemperatureDerivative", updateTemperatureKernel, deltaTemperatureKernel, predictionKernel);
@@ -181,8 +191,6 @@ public class Simulation3D : MonoBehaviour
         compute.SetFloat("R", R);
 
         gpuSort = new();
-        gpuSort.SetBuffers(spatialIndices, spatialOffsets);
-
 
         // Init display
         display.Init(this);
@@ -246,6 +254,9 @@ public class Simulation3D : MonoBehaviour
         compute.SetFloat("deltaTime", deltaTime/2);
         compute.SetInt("RK4step",0);
         ComputeHelper.Dispatch(compute, temperatureBuffer.count, kernelIndex: spatialHashKernel);
+        gpuSort.SetBuffers(spatialIndices, spatialOffsets);
+        gpuSort.SortAndCalculateOffsets();
+        gpuSort.SetBuffers(spatialIndicesLong, spatialOffsetsLong);
         gpuSort.SortAndCalculateOffsets();
         ComputeHelper.Dispatch(compute, temperatureBuffer.count, kernelIndex: densityKernel);
         ComputeHelper.Dispatch(compute, temperatureBuffer.count, kernelIndex: stateVariablesKernel);
@@ -257,6 +268,9 @@ public class Simulation3D : MonoBehaviour
 
         compute.SetInt("RK4step",1);
         ComputeHelper.Dispatch(compute, temperatureBuffer.count, kernelIndex: spatialHashKernel);
+        gpuSort.SetBuffers(spatialIndices, spatialOffsets);
+        gpuSort.SortAndCalculateOffsets();
+        gpuSort.SetBuffers(spatialIndicesLong, spatialOffsetsLong);
         gpuSort.SortAndCalculateOffsets();
         ComputeHelper.Dispatch(compute, temperatureBuffer.count, kernelIndex: densityKernel);
         ComputeHelper.Dispatch(compute, temperatureBuffer.count, kernelIndex: stateVariablesKernel);
@@ -269,6 +283,9 @@ public class Simulation3D : MonoBehaviour
         compute.SetFloat("deltaTime", deltaTime);
         compute.SetInt("RK4step",2);
         ComputeHelper.Dispatch(compute, temperatureBuffer.count, kernelIndex: spatialHashKernel);
+        gpuSort.SetBuffers(spatialIndices, spatialOffsets);
+        gpuSort.SortAndCalculateOffsets();
+        gpuSort.SetBuffers(spatialIndicesLong, spatialOffsetsLong);
         gpuSort.SortAndCalculateOffsets();
         ComputeHelper.Dispatch(compute, temperatureBuffer.count, kernelIndex: densityKernel);
         ComputeHelper.Dispatch(compute, temperatureBuffer.count, kernelIndex: stateVariablesKernel);
@@ -280,6 +297,9 @@ public class Simulation3D : MonoBehaviour
         
         compute.SetInt("RK4step",3);
         ComputeHelper.Dispatch(compute, temperatureBuffer.count, kernelIndex: spatialHashKernel);
+        gpuSort.SetBuffers(spatialIndices, spatialOffsets);
+        gpuSort.SortAndCalculateOffsets();
+        gpuSort.SetBuffers(spatialIndicesLong, spatialOffsetsLong);
         gpuSort.SortAndCalculateOffsets();
         ComputeHelper.Dispatch(compute, temperatureBuffer.count, kernelIndex: densityKernel);
         ComputeHelper.Dispatch(compute, temperatureBuffer.count, kernelIndex: stateVariablesKernel);
@@ -310,6 +330,7 @@ public class Simulation3D : MonoBehaviour
         compute.SetFloat("gravity", gravity);
         compute.SetFloat("collisionDamping", collisionDamping);
         compute.SetFloat("smoothingRadius", smoothingRadius);
+        compute.SetFloat("longRadius", smoothingRadiusLong);
         compute.SetFloat("dx", dx);
         molesByParticle = molesBym3 * particleDimension * particleDimension * particleDimension * 4 / 3 * PI;
         compute.SetFloat("molesByParticle", molesByParticle);

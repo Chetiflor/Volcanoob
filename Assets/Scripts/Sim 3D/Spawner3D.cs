@@ -57,8 +57,8 @@ public class Spawner3D : MonoBehaviour
 
                     // water
 
-                    float viscosity = 10000f;
-                    float thermicConductivity = 1000000f;
+                    float viscosity = 1000.0f;
+                    float thermicConductivity = 30000f;
                     float thermicCapacity = 0.4185f;
                     float molarMass = 0.018f; // molar mass
                     float molarVolume = 55555;
@@ -93,7 +93,7 @@ public class Spawner3D : MonoBehaviour
                 }
             }
         }
-        
+        i = 0;
         for (int z = 0; z < Nz; z++)
         {
             for (int y = 0; y < Ny; y++)
@@ -114,7 +114,8 @@ public class Spawner3D : MonoBehaviour
 
                     float3 pos = new float3(px,py,pz);
 
-                    gridPositions[z*Nx*Ny + y*Nx + x] = pos;
+                    gridPositions[i] = pos;
+                    i++;
 
                 }
             }

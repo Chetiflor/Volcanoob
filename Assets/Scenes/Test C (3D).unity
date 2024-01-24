@@ -263,14 +263,15 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: c8b3b79f98be3f34e8fefade4cef2ade, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  timeScale: 0.05
+  timeScale: 0.1
   fixedTimeStep: 0
   iterationsPerFrame: 3
   gravity: -10
   collisionDamping: 0.95
   smoothingRadius: 0.2
+  smoothingRadiusLong: 0.5
   particleDimension: 0.002
-  dx: 0.1
+  dx: 0.01
   targetDensity: 630
   pressureMultiplier: 288
   nearPressureMultiplier: 2.25
@@ -281,18 +282,18 @@ MonoBehaviour:
   thermostatConductivity: 1000
   athmospherePressure: 100000
   airDensity: 1.3
-  Nx: 3
-  Ny: 4
-  Nz: 5
+  Nx: 120
+  Ny: 75
+  Nz: 75
   numVertices: 0
   numCubes: 0
-  drawGrid: 0
+  drawGrid: 1
   compute: {fileID: 7200000, guid: 9443696acfd0ebe4fb503b56d952256c, type: 3}
   spawner: {fileID: 271053323}
   display: {fileID: 271053320}
   floorDisplay: {fileID: 620375868}
   thermostat: {fileID: 1230015180}
-  isoDensity: 1100
+  isoDensity: 210000
   mcshader: {fileID: 4800000, guid: 0487c824a6f1b83b7b706e040632a61a, type: 3}
 --- !u!114 &271053320
 MonoBehaviour:
@@ -307,6 +308,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   shader: {fileID: 4800000, guid: 7b2961949ddfb237da69ed497e96a9b5, type: 3}
+  gridshader: {fileID: 4800000, guid: d01b8fc2a33d87f3580eca55349c301e, type: 3}
   mcshader: {fileID: 4800000, guid: 0487c824a6f1b83b7b706e040632a61a, type: 3}
   scale: 0.05
   col: {r: 0.27803493, g: 0.49487686, b: 0.8301887, a: 1}
@@ -344,6 +346,7 @@ MonoBehaviour:
   velocityDisplayMax: 6
   gradientTexture: {fileID: 0}
   marchingCubesRendering: 1
+  drawGridVertices: 0
   meshResolution: 3
   debug_MeshTriCount: 2
 --- !u!33 &271053322
@@ -382,6 +385,7 @@ MonoBehaviour:
   Nx: 0
   Ny: 0
   Nz: 0
+  simTransform: {fileID: 0}
   debug_numParticles: 15625
 --- !u!1 &620375867
 GameObject:
